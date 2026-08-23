@@ -4,13 +4,28 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_admin
+from app.core.deps import get_current_user, require_admin
 from app.core.security import hash_password
 from app.db import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+@router.get("/search", response_model=list[UserOut])
+def search_users(
+    q: str = "",
+    limit: int = 20,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Any authenticated user may look up profiles (for sharing knowledge bases)."""
+    stmt = select(User).where(User.is_active.is_(True))
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(User.username.ilike(like) | User.display_name.ilike(like))
+    return db.scalars(stmt.order_by(User.username).limit(min(max(limit, 1), 50))).all()
 
 
 @router.get("", response_model=list[UserOut])

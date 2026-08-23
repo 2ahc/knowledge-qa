@@ -52,3 +52,25 @@ def test_admin_cannot_demote_or_deactivate_self(client, db):
 
     resp = client.patch(f"/api/users/{admin.id}", json={"is_active": False}, headers=h)
     assert resp.status_code == 400
+
+
+def test_user_search_visible_to_regular_users(client, db):
+    make_user(db, "alice")
+    bob = make_user(db, "bob", display_name="Bob Lee")
+    make_user(db, "inactive", is_active=False)
+    h = auth_headers(login(client, "alice")["access_token"])
+
+    # no query: lists active users only
+    resp = client.get("/api/users/search", headers=h)
+    assert resp.status_code == 200
+    names = {u["username"] for u in resp.json()}
+    assert "alice" in names and "bob" in names and "inactive" not in names
+
+    # query filters by username or display name
+    resp = client.get("/api/users/search?q=bob", headers=h)
+    assert [u["username"] for u in resp.json()] == ["bob"]
+    resp = client.get("/api/users/search?q=Lee", headers=h)
+    assert [u["id"] for u in resp.json()] == [str(bob.id)]
+
+    # unauthenticated -> 401
+    assert client.get("/api/users/search").status_code in (401, 403)

@@ -21,6 +21,7 @@
               <el-icon class="kb-more"><MoreFilled /></el-icon>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="members" v-if="canManage(kbItem)">成员管理</el-dropdown-item>
                   <el-dropdown-item command="delete" v-if="canManage(kbItem)">删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -80,6 +81,55 @@
       </el-table>
     </el-card>
 
+    <!-- 成员管理对话框 -->
+    <el-dialog v-model="membersVisible" :title="`成员管理：${membersKb?.name || ''}`" width="560px">
+      <el-alert
+        v-if="membersKb?.visibility !== 'shared'"
+        type="info"
+        :closable="false"
+        show-icon
+        title="仅「共享」可见性的知识库会按成员授权；私有库只有创建者可见，公开库所有人可见。"
+        style="margin-bottom: 14px"
+      />
+      <div class="member-add">
+        <el-select
+          v-model="memberForm.user_id"
+          filterable
+          remote
+          reserve-keyword
+          placeholder="搜索用户名/昵称添加成员"
+          :remote-method="searchUsers"
+          :loading="userSearching"
+          style="flex: 1"
+        >
+          <el-option v-for="u in userOptions" :key="u.id" :label="`${u.display_name}（${u.username}）`" :value="u.id" />
+        </el-select>
+        <el-radio-group v-model="memberForm.role">
+          <el-radio value="viewer">查看</el-radio>
+          <el-radio value="editor">编辑</el-radio>
+        </el-radio-group>
+        <el-button type="primary" :disabled="!memberForm.user_id" :loading="memberSaving" @click="addMember">
+          添加
+        </el-button>
+      </div>
+      <el-table :data="members" v-loading="membersLoading" empty-text="暂无成员" style="margin-top: 14px">
+        <el-table-column prop="display_name" label="显示名" />
+        <el-table-column prop="username" label="用户名" />
+        <el-table-column label="角色" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.role === 'editor' ? 'warning' : 'info'">
+              {{ row.role === 'editor' ? '编辑' : '查看' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }">
+            <el-button size="small" text type="danger" @click="removeMember(row)">移除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
     <!-- 新建知识库对话框 -->
     <el-dialog v-model="createVisible" title="新建知识库" width="460px">
       <el-form label-position="top">
@@ -109,6 +159,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadRawFile } from 'element-plus'
 import { MoreFilled, Plus, Upload } from '@element-plus/icons-vue'
+import { http } from '../api/http'
 import { useKbStore } from '../stores/kb'
 import { useAuthStore } from '../stores/auth'
 import type { DocumentItem, KnowledgeBase } from '../api/types'
@@ -181,7 +232,9 @@ async function createKb() {
 }
 
 async function onKbCommand(cmd: string, item: KnowledgeBase) {
-  if (cmd === 'delete') {
+  if (cmd === 'members') {
+    await openMembers(item)
+  } else if (cmd === 'delete') {
     await ElMessageBox.confirm(`删除知识库「${item.name}」？其所有文档与向量将一并删除。`, '危险操作', {
       type: 'warning',
     }).catch(() => Promise.reject())
@@ -222,6 +275,61 @@ async function removeDoc(doc: DocumentItem) {
   await kb.deleteDocument(selectedKbId.value, doc.id)
   await refreshDocs()
   await kb.fetchKbs()
+}
+
+// ---- members ----
+const membersVisible = ref(false)
+const membersKb = ref<KnowledgeBase | null>(null)
+const members = ref<any[]>([])
+const membersLoading = ref(false)
+const memberSaving = ref(false)
+const memberForm = ref({ user_id: '', role: 'viewer' })
+const userOptions = ref<any[]>([])
+const userSearching = ref(false)
+
+async function openMembers(item: KnowledgeBase) {
+  membersKb.value = item
+  membersVisible.value = true
+  memberForm.value = { user_id: '', role: 'viewer' }
+  await refreshMembers()
+  searchUsers('')
+}
+async function refreshMembers() {
+  if (!membersKb.value) return
+  membersLoading.value = true
+  try {
+    const { data } = await http.get(`/kbs/${membersKb.value.id}/members`)
+    members.value = data
+  } finally {
+    membersLoading.value = false
+  }
+}
+async function searchUsers(q: string) {
+  userSearching.value = true
+  try {
+    const { data } = await http.get('/users/search', { params: { q } })
+    userOptions.value = data.filter((u: any) => u.id !== auth.user?.id)
+  } finally {
+    userSearching.value = false
+  }
+}
+async function addMember() {
+  if (!membersKb.value || !memberForm.value.user_id) return
+  memberSaving.value = true
+  try {
+    await http.post(`/kbs/${membersKb.value.id}/members`, memberForm.value)
+    ElMessage.success('已添加成员')
+    memberForm.value.user_id = ''
+    await refreshMembers()
+  } finally {
+    memberSaving.value = false
+  }
+}
+async function removeMember(row: any) {
+  if (!membersKb.value) return
+  await http.delete(`/kbs/${membersKb.value.id}/members/${row.user_id}`)
+  ElMessage.success('已移除')
+  await refreshMembers()
 }
 
 onMounted(async () => {
@@ -286,6 +394,11 @@ onUnmounted(() => {
   gap: 12px;
   font-size: 12px;
   color: var(--sub);
+}
+.member-add {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 .doc-panel {
   margin-top: 8px;

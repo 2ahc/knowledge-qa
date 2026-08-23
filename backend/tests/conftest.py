@@ -72,15 +72,16 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def make_user(db, username="alice", password="pass123456", role="user"):
+def make_user(db, username="alice", password="pass123456", role="user", display_name=None, is_active=True):
     from app.core.security import hash_password
     from app.models.user import User, UserRole
 
     user = User(
         username=username,
         password_hash=hash_password(password),
-        display_name=username,
+        display_name=display_name or username,
         role=UserRole(role),
+        is_active=is_active,
     )
     db.add(user)
     db.commit()
