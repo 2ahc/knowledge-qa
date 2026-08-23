@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, chat, conversations, documents, kbs, users
+from app.api import admin, auth, chat, conversations, documents, eval, kbs, users
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,8 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(conversations.router)
     app.include_router(chat.router)
+    app.include_router(eval.router)
+    app.include_router(admin.router)
     return app
 
 

@@ -68,3 +68,40 @@ def last_messages(db, conversation_id, limit: int = 20) -> list[Message]:
     )
     msgs = list(db.scalars(stmt).all())
     return msgs[-limit:]
+
+
+JUDGE_PROMPT = """你是一个问答质量评审员。请根据【参考资料】【问题】【回答】，从两个维度打分（1-5 的整数）：
+- faithfulness（忠实性）：回答是否完全基于资料，无编造内容
+- relevance（相关性）：回答是否切题、解决了问题
+
+只输出 JSON，例如：{"faithfulness": 4, "relevance": 5}"""
+
+
+def judge_answer(question: str, materials_text: str, answer: str) -> dict:
+    """LLM-as-judge scoring. Returns {faithfulness, relevance} (0 on parse failure)."""
+    import json as _json
+    import re
+
+    client = get_client()
+    resp = client.chat.completions.create(
+        model=settings.llm_model,
+        messages=[
+            {"role": "system", "content": JUDGE_PROMPT},
+            {
+                "role": "user",
+                "content": f"【参考资料】\n{materials_text}\n\n【问题】\n{question}\n\n【回答】\n{answer}",
+            },
+        ],
+    )
+    text = resp.choices[0].message.content or ""
+    m = re.search(r"\{.*\}", text, re.S)
+    if m:
+        try:
+            data = _json.loads(m.group(0))
+            return {
+                "faithfulness": int(data.get("faithfulness", 0)),
+                "relevance": int(data.get("relevance", 0)),
+            }
+        except (ValueError, TypeError):
+            pass
+    return {"faithfulness": 0, "relevance": 0}
