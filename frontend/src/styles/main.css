@@ -1,0 +1,76 @@
+:root {
+  --brand: #2f6bff;
+  --brand-dark: #1e4fd6;
+  --bg: #f5f7fa;
+  --ink: #26303c;
+  --sub: #8a94a6;
+  --line: #e8ecf1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* markdown body */
+.md-body {
+  line-height: 1.75;
+  word-break: break-word;
+}
+.md-body p {
+  margin: 0.5em 0;
+}
+.md-body pre {
+  background: #f0f2f5;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.md-body code {
+  background: #f0f2f5;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+.md-body pre code {
+  background: none;
+  padding: 0;
+}
+.md-body blockquote {
+  border-left: 4px solid var(--line);
+  margin: 0.6em 0;
+  padding: 2px 12px;
+  color: var(--sub);
+}
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+}
+.md-body th,
+.md-body td {
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+}
