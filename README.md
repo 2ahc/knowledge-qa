@@ -71,6 +71,8 @@ docker compose up -d --build
 cd backend && uv run python ../scripts/seed_demo.py   # 可选：种子数据
 ```
 
+> **更换百炼 Key 后**：`docker compose up -d --force-recreate backend worker`（环境变量在容器创建时注入，必须重建容器才能生效）。
+
 - 前端：`http://localhost:8090`
 - 后端 API：`http://localhost:8000/api`（前端经 nginx 反代 `/api`，SSE 已配置不缓冲）
 - 服务：`postgres`（pgvector:pg16）/ `backend` / `worker` / `frontend`
