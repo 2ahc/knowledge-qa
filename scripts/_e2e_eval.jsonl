@@ -1,0 +1,3 @@
+{"question": "拾光茶屋成立于哪一年？总部在哪个城市？", "expect_keywords": ["2020", "杭州"], "expect_doc": "_e2e_doc"}
+{"question": "会员日有什么优惠？", "expect_keywords": ["半价"], "expect_doc": "_e2e_doc"}
+{"question": "茶汤的有效期是多久？", "expect_keywords": ["小时"], "expect_doc": "_e2e_doc"}

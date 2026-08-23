@@ -78,7 +78,8 @@ async def upload_document(
             out.write(chunk)
 
     doc.size_bytes = size
-    doc.stored_path = str(target)
+    # store path relative to the upload root so it resolves on host and in containers
+    doc.stored_path = f"{kb_id}/{doc.id}{ext}"
     db.commit()
     db.refresh(doc)
     task_queue.enqueue(db, TaskKind.document_index, {"document_id": str(doc.id)})
@@ -120,6 +121,8 @@ def delete_document(
     if doc is None or doc.kb_id != kb_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在")
     if doc.stored_path:
-        Path(doc.stored_path).unlink(missing_ok=True)
+        from app.services.indexing import resolve_stored_path
+
+        resolve_stored_path(doc.stored_path).unlink(missing_ok=True)
     db.delete(doc)
     db.commit()

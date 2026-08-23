@@ -105,7 +105,8 @@ def main() -> None:
             target_dir.mkdir(parents=True, exist_ok=True)
             target = target_dir / f"{doc.id}.md"
             target.write_text(SAMPLE_DOC, encoding="utf-8")
-            doc.stored_path = str(target)
+            # relative path: resolves on host and inside containers alike
+            doc.stored_path = f"{kb.id}/{doc.id}.md"
             doc.size_bytes = target.stat().st_size
             db.commit()
             task_queue.enqueue(db, TaskKind.document_index, {"document_id": str(doc.id)})

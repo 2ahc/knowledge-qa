@@ -1,6 +1,7 @@
 """Document indexing pipeline: parse -> chunk -> embed -> store."""
 import logging
 import uuid
+from pathlib import Path
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -19,6 +20,21 @@ class IndexingError(Exception):
     pass
 
 
+def resolve_stored_path(stored_path: str) -> Path:
+    """Resolve a document's stored path.
+
+    New uploads store paths relative to the upload root so they resolve both on
+    the host and inside containers; legacy rows may hold absolute paths.
+    """
+    p = Path(stored_path)
+    if p.is_absolute() and p.exists():
+        return p
+    candidate = settings.upload_path / stored_path
+    if candidate.exists() or not p.is_absolute():
+        return candidate
+    return p
+
+
 def index_document(db: Session, document_id: uuid.UUID) -> None:
     """Full pipeline for one document. Raises IndexingError with a user-readable message."""
     doc = db.get(Document, document_id)
@@ -30,7 +46,7 @@ def index_document(db: Session, document_id: uuid.UUID) -> None:
     doc.error = ""
     db.commit()
     try:
-        segments = parse_document(doc.filetype, doc.stored_path)
+        segments = parse_document(doc.filetype, str(resolve_stored_path(doc.stored_path)))
     except ParseError:
         raise
     except Exception as e:  # noqa: BLE001
