@@ -75,6 +75,11 @@ export const useChatStore = defineStore('chat', {
         streaming: true,
       }
       this.messages.push(assistant)
+      // 关键：必须取回数组里的"响应式代理"引用来改消息内容。
+      // Vue 3 的响应性靠 Proxy 拦截读写 —— 直接修改上面那个原始对象（raw）
+      // 会绕过 Proxy 的 setter，不触发任何界面更新，
+      // 表现就是"回答生成完了页面却不动，必须刷新才显示"。
+      const live = this.messages[this.messages.length - 1]
       this.sending = true
       this.controller = new AbortController()
 
@@ -84,9 +89,9 @@ export const useChatStore = defineStore('chat', {
           (ev) => {
             // 3) 按事件类型分发（协议见 api/sse.ts）
             if (ev.type === 'token' && ev.content) {
-              assistant.content += ev.content // 增量文本 → 打字机效果
+              live.content += ev.content // 增量文本 → 打字机效果
             } else if (ev.type === 'citations') {
-              assistant.citations = ev.citations || [] // 引用卡片数据
+              live.citations = ev.citations || [] // 引用卡片数据
             } else if (ev.type === 'done') {
               // 结束事件：新会话此时才拿到真实 ID，刷新左侧会话列表
               if (ev.conversation_id) {
@@ -94,7 +99,7 @@ export const useChatStore = defineStore('chat', {
                 this.fetchConversations()
               }
             } else if (ev.type === 'error') {
-              assistant.content += `\n\n> ⚠️ ${ev.message}`
+              live.content += `\n\n> ⚠️ ${ev.message}`
             }
           },
           this.controller.signal
@@ -102,10 +107,10 @@ export const useChatStore = defineStore('chat', {
       } catch (e: any) {
         // 主动停止（AbortError）不算错误，其余异常展示给用户
         if (e.name !== 'AbortError') {
-          assistant.content += `\n\n> ⚠️ 请求失败：${e.message}`
+          live.content += `\n\n> ⚠️ 请求失败：${e.message}`
         }
       } finally {
-        assistant.streaming = false
+        live.streaming = false
         this.sending = false
         this.controller = null
       }
