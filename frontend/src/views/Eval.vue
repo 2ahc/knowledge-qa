@@ -163,6 +163,9 @@
 </template>
 
 <script setup lang="ts">
+// 问答评测页：评测集（JSONL 题目）+ 评测运行（异步任务，轮询进度）。
+// 指标说明：检索命中率=期望文档被召回的比例；关键词=期望关键词出现在回答中的比例；
+// 忠实性/相关性=LLM 裁判 1-5 分。
 import { onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadRawFile } from 'element-plus'
 import { Plus, VideoPlay } from '@element-plus/icons-vue'
@@ -230,6 +233,7 @@ function openCreateDs() {
   dsForm.value = { name: '', jsonl: '' }
   dsDialogVisible.value = true
 }
+// 选择 .jsonl 文件：本地读取文本填入输入框（不直接上传，便于用户预览修改）
 function onDsFile(file: UploadRawFile) {
   const reader = new FileReader()
   reader.onload = () => {
@@ -238,6 +242,7 @@ function onDsFile(file: UploadRawFile) {
   reader.readAsText(file)
   return false
 }
+// 保存评测集：逐行解析 JSONL，任何一行非法都中止并提示行号
 async function saveDs() {
   if (!dsForm.value.name.trim()) {
     ElMessage.warning('请输入名称')
@@ -308,10 +313,12 @@ async function viewRun(run: any) {
 
 onMounted(async () => {
   await Promise.all([fetchDatasets(), fetchRuns(), kb.fetchKbs()])
+  // 有评测在排队/运行时每 4 秒刷新一次，让进度实时可见
   pollTimer = window.setInterval(async () => {
     if (runs.value.some((r) => ['queued', 'running'].includes(r.status))) await fetchRuns()
   }, 4000)
 })
+// 离开页面清理轮询
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })

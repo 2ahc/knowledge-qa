@@ -1,3 +1,6 @@
+# 用户管理接口：
+#   /search  —— 任何登录用户可用（给共享知识库挑成员用），只返回启用账号
+#   其余接口 —— 仅管理员（用户列表/创建/修改）
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,7 +23,7 @@ def search_users(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Any authenticated user may look up profiles (for sharing knowledge bases)."""
+    """按用户名/显示名模糊搜索用户（供知识库添加成员时选人）。"""
     stmt = select(User).where(User.is_active.is_(True))
     if q:
         like = f"%{q.strip()}%"
@@ -63,10 +66,12 @@ def update_user(
     if body.display_name is not None:
         user.display_name = body.display_name
     if body.role is not None:
+        # 自我保护：管理员不能取消自己的管理员权限（防止系统失去管理员）
         if user.id == admin.id and body.role.value != "admin":
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能取消自己的管理员权限")
         user.role = body.role
     if body.is_active is not None:
+        # 自我保护：不能停用自己的账号
         if user.id == admin.id and not body.is_active:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能停用自己的账号")
         user.is_active = body.is_active

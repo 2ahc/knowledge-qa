@@ -1,10 +1,10 @@
-"""Seed demo data: admin user + a public sample knowledge base with one document.
+"""初始化演示数据：管理员账号 + 一个公开的示例知识库（含一篇示例文档）。
 
-Usage (from backend/):
+用法（在 backend/ 目录下）：
     uv run python ../scripts/seed_demo.py [--admin-password <pwd>]
 
-Prints the admin credentials. Safe to re-run: existing objects are skipped.
-Requires the API server (or worker) to be running afterwards to index the document.
+会打印管理员账号密码。可安全重复执行：已存在的对象自动跳过。
+注意：执行后需要启动 API 服务（或 worker）来完成示例文档的索引。
 """
 import argparse
 import secrets
@@ -55,7 +55,7 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        # 1) admin user
+        # 1) 管理员账号
         admin = db.scalar(select(User).where(User.username == "admin"))
         if admin is None:
             password = args.admin_password or secrets.token_urlsafe(12)
@@ -71,7 +71,7 @@ def main() -> None:
         else:
             print("[seed] 管理员 admin 已存在，跳过")
 
-        # 2) demo knowledge base
+        # 2) 示例知识库（公开可见，便于任何账号体验）
         kb = db.scalar(select(KnowledgeBase).where(KnowledgeBase.name == "示例知识库"))
         if kb is None:
             kb = KnowledgeBase(
@@ -87,7 +87,7 @@ def main() -> None:
         else:
             print(f"[seed] 知识库「示例知识库」已存在 ({kb.id})")
 
-        # 3) sample document + index task (idempotent by filename)
+        # 3) 示例文档 + 索引任务（按文件名判断幂等，重复执行不会产生重复文档）
         exists = db.scalar(
             select(Document).where(Document.kb_id == kb.id, Document.filename == "员工手册示例.md")
         )
@@ -105,7 +105,7 @@ def main() -> None:
             target_dir.mkdir(parents=True, exist_ok=True)
             target = target_dir / f"{doc.id}.md"
             target.write_text(SAMPLE_DOC, encoding="utf-8")
-            # relative path: resolves on host and inside containers alike
+            # 相对路径：宿主机与容器内均可解析
             doc.stored_path = f"{kb.id}/{doc.id}.md"
             doc.size_bytes = target.stat().st_size
             db.commit()

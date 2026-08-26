@@ -1,3 +1,4 @@
+# 知识库、成员、文档的请求/响应模型。
 import uuid
 from datetime import datetime
 
@@ -19,6 +20,8 @@ class KbUpdate(BaseModel):
 
 
 class KbOut(BaseModel):
+    """知识库出参：基础信息 + 实时统计（文档数/切片数）。"""
+
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     name: str
@@ -44,6 +47,8 @@ class MemberOut(BaseModel):
 
 
 class DocumentOut(BaseModel):
+    """文档出参：前端据此渲染文档列表与索引状态。"""
+
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     kb_id: uuid.UUID

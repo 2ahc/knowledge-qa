@@ -9,13 +9,13 @@ def test_short_segment_single_chunk():
 
 
 def test_long_text_split_with_overlap():
-    text = "这是一个测试句子。" * 200  # ~1800 chars
+    text = "这是一个测试句子。" * 200  # 约 1800 字，必然切成多片
     chunks = chunk_segments([Segment(text=text, meta={"page": 3})], chunk_size=200, overlap=20)
     assert len(chunks) > 1
-    assert all(len(c.content) <= 220 for c in chunks)  # chunk_size + overlap cap
-    # meta inherited
+    assert all(len(c.content) <= 220 for c in chunks)  # 上限 = chunk_size + overlap
+    # 元信息（页码）从段落继承到切片
     assert chunks[0].meta["page"] == 3
-    # overlap present: next chunk starts with tail of previous
+    # 重叠生效：下一片的开头包含上一片的末尾内容
     assert chunks[1].content[:10] in chunks[0].content
 
 

@@ -1,4 +1,14 @@
-"""initial schema
+"""初始数据库结构（建库脚本）
+
+包含全部核心表：
+  users / conversations / messages     —— 用户与问答
+  knowledge_bases / kb_members         —— 知识库与成员
+  documents / chunks                   —— 文档与向量切片
+  tasks / eval_datasets / eval_runs    —— 任务队列与评测
+
+并启用两个关键扩展：
+  pgvector —— 向量相似度检索（HNSW 余弦索引）
+  pg_trgm  —— 三元组关键词检索（GIN 索引）
 
 Revision ID: d2e37c92e74f
 Revises: 
@@ -146,12 +156,12 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_chunks_document_id'), 'chunks', ['document_id'], unique=False)
     op.create_index(op.f('ix_chunks_kb_id'), 'chunks', ['kb_id'], unique=False)
-    # vector similarity index (HNSW, cosine)
+    # 向量检索索引：HNSW + 余弦距离，支撑混合检索的向量一路
     op.execute(
         "CREATE INDEX ix_chunks_embedding_hnsw ON chunks "
         "USING hnsw (embedding vector_cosine_ops)"
     )
-    # keyword trigram index for hybrid retrieval
+    # 关键词检索索引：GIN + 三元组，支撑混合检索的关键词一路
     op.execute("CREATE INDEX ix_chunks_content_trgm ON chunks USING gin (content gin_trgm_ops)")
     # ### end Alembic commands ###
 

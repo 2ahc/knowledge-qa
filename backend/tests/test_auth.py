@@ -31,7 +31,7 @@ def test_refresh_flow(client, db):
     new_tokens = resp.json()
     assert new_tokens["access_token"]
 
-    # access token cannot be used as refresh token
+    # 令牌类型隔离：access 令牌不能冒充 refresh 令牌使用
     resp = client.post("/api/auth/refresh", json={"refresh_token": tokens["access_token"]})
     assert resp.status_code == 401
 

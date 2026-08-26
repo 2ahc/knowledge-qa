@@ -156,6 +156,8 @@
 </template>
 
 <script setup lang="ts">
+// 知识库管理页：知识库卡片列表 + 选中库的文档面板 + 成员管理/新建对话框。
+// 文档索引是异步的，页面用 3 秒轮询刷新处于处理中的文档状态。
 import { onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadRawFile } from 'element-plus'
 import { MoreFilled, Plus, Upload } from '@element-plus/icons-vue'
@@ -176,6 +178,7 @@ const newKb = ref({ name: '', description: '', visibility: 'private' })
 
 let pollTimer: number | undefined
 
+// 是否可管理该库（删除/成员管理）：管理员或创建者
 function canManage(item: KnowledgeBase) {
   return auth.isAdmin || auth.user?.id === item.owner_id
 }
@@ -247,6 +250,7 @@ async function onKbCommand(cmd: string, item: KnowledgeBase) {
   }
 }
 
+// 上传文档：before-upload 钩子返回 false 表示手动接管上传（走自己的 axios）
 async function onUpload(file: UploadRawFile) {
   if (!selectedKbId.value) return false
   try {
@@ -255,7 +259,7 @@ async function onUpload(file: UploadRawFile) {
     await refreshDocs()
     await kb.fetchKbs()
   } catch {
-    /* interceptor handles */
+    /* 错误提示由 axios 拦截器统一处理 */
   }
   return false
 }
@@ -277,7 +281,7 @@ async function removeDoc(doc: DocumentItem) {
   await kb.fetchKbs()
 }
 
-// ---- members ----
+// ---- 成员管理（仅共享库按成员授权，见对话框内的说明）----
 const membersVisible = ref(false)
 const membersKb = ref<KnowledgeBase | null>(null)
 const members = ref<any[]>([])
@@ -304,6 +308,7 @@ async function refreshMembers() {
     membersLoading.value = false
   }
 }
+// 远程搜索用户（供添加成员选人；排除自己）
 async function searchUsers(q: string) {
   userSearching.value = true
   try {
@@ -334,7 +339,8 @@ async function removeMember(row: any) {
 
 onMounted(async () => {
   await kb.fetchKbs()
-  // poll document statuses while any is processing
+  // 轮询文档状态：只要有文档还在排队/解析/向量化，每 3 秒刷新一次，
+  // 让索引进度实时可见；全部完成后轮询自动变为空操作
   pollTimer = window.setInterval(async () => {
     if (!selectedKbId.value) return
     const busy = documents.value.some((d) => ['pending', 'parsing', 'embedding'].includes(d.status))
@@ -345,6 +351,7 @@ onMounted(async () => {
   }, 3000)
 })
 
+// 离开页面时清理轮询定时器
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })

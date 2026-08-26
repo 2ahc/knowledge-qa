@@ -49,7 +49,7 @@ async function onSubmit() {
     ElMessage.success('登录成功')
     router.push('/chat')
   } catch {
-    /* interceptor shows the error */
+    /* 登录失败的提示由 axios 拦截器统一弹出 */
   } finally {
     loading.value = false
   }

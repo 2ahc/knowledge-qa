@@ -1,3 +1,4 @@
+// 应用入口：装配 Vue3 + Pinia(状态) + Vue Router(路由) + Element Plus(组件库，中文语言包)。
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'

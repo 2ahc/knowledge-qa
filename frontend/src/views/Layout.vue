@@ -40,6 +40,8 @@
 </template>
 
 <script setup lang="ts">
+// 整体布局：顶部导航栏（品牌 + 菜单 + 用户信息）+ 主内容区。
+// 菜单项按角色过滤：评测与管理后台仅管理员可见。
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -60,6 +62,7 @@ function onCommand(cmd: string) {
 }
 
 onMounted(async () => {
+  // 页面刷新后 user 丢失：用本地令牌拉取当前用户；失败（令牌无效）则回登录页
   if (!auth.user) {
     try {
       await auth.fetchMe()

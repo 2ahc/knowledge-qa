@@ -1,16 +1,25 @@
+# 一键部署编排：4 个服务
+#   postgres  —— PostgreSQL 16 + pgvector/pg_trgm 扩展（数据持久化在 pgdata 卷）
+#   backend   —— FastAPI 应用（启动时自动执行数据库迁移）
+#   worker    —— 后台任务消费者（文档索引/评测），与 backend 共用镜像和上传卷
+#   frontend  —— Vue3 前端（nginx 托管静态资源 + 反代 /api，对外端口 8090）
+#
+# 启动：docker compose up -d --build
+# 注意：切勿随意 docker compose down -v，会清空数据库与上传文件！
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16  # 自带 pgvector 扩展的官方镜像
     container_name: kqa-postgres
     environment:
       POSTGRES_USER: kqa
       POSTGRES_PASSWORD: kqa_pass
       POSTGRES_DB: knowledge_qa
     ports:
-      - "5432:5432"
+      - "5432:5432"  # 映射到宿主机，便于本地调试直连
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data  # 数据持久化
     healthcheck:
+      # backend/worker 依赖此健康检查：数据库就绪后才启动
       test: ["CMD-SHELL", "pg_isready -U kqa -d knowledge_qa"]
       interval: 5s
       timeout: 3s
@@ -21,13 +30,14 @@ services:
       context: .
       dockerfile: backend.Dockerfile
     container_name: kqa-backend
-    env_file: .env
+    env_file: .env  # API Key、模型配置等敏感项从 .env 注入
     environment:
+      # 容器内走服务名 postgres 连接数据库（覆盖 .env 里的本机地址）
       DATABASE_URL: postgresql+psycopg://kqa:kqa_pass@postgres:5432/knowledge_qa
-      RUN_WORKER: "false"
-      UPLOAD_DIR: /app/uploads
+      RUN_WORKER: "false"  # 生产环境由独立 worker 容器消费任务，避免重复消费
+      UPLOAD_DIR: /app/uploads  # 容器内上传目录（与 worker 共享卷）
     volumes:
-      - uploads:/app/uploads
+      - uploads:/app/uploads  # 上传文件持久化，且与 worker 共享
     ports:
       - "8000:8000"
     depends_on:
@@ -37,16 +47,16 @@ services:
   worker:
     build:
       context: .
-      dockerfile: backend.Dockerfile
+      dockerfile: backend.Dockerfile  # 复用 backend 镜像，只改启动命令
     container_name: kqa-worker
-    command: ["/app/.venv/bin/python", "-m", "app.worker"]
+    command: ["/app/.venv/bin/python", "-m", "app.worker"]  # 独立进程消费任务队列
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://kqa:kqa_pass@postgres:5432/knowledge_qa
       RUN_WORKER: "false"
       UPLOAD_DIR: /app/uploads
     volumes:
-      - uploads:/app/uploads
+      - uploads:/app/uploads  # 必须与 backend 同卷：读取上传的原始文件
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,10 +69,10 @@ services:
       dockerfile: frontend.Dockerfile
     container_name: kqa-frontend
     ports:
-      - "8090:80"
+      - "8090:80"  # 浏览器访问入口：http://localhost:8090
     depends_on:
       - backend
 
 volumes:
-  pgdata:
-  uploads:
+  pgdata:   # 数据库数据
+  uploads:  # 上传的原始文档

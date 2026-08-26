@@ -1,3 +1,6 @@
+# 评测接口：评测集（题目）与评测运行（发起/查询）。
+# 评测是重操作（逐题检索+生成+裁判打分），因此发起运行走异步任务队列，
+# 前端轮询 GET /runs/{id} 看进度。
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,6 +30,7 @@ def create_dataset(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # 前置校验：每条评测项必须有 question
     for i, item in enumerate(body.items):
         if not item.get("question"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"第 {i + 1} 条评测项缺少 question 字段")
@@ -76,6 +80,7 @@ def create_run(
     db.add(run)
     db.commit()
     db.refresh(run)
+    # 入队异步执行：接口立即返回，worker 负责真正的评测
     task_queue.enqueue(db, TaskKind.eval_run, {"eval_run_id": str(run.id)})
     return run
 

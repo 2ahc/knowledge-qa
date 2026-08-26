@@ -75,6 +75,8 @@
 </template>
 
 <script setup lang="ts">
+// 智能问答页：左侧会话列表 + 右侧知识库选择、消息流、输入框。
+// 发送逻辑在 chat store（SSE 流式），这里只负责交互细节。
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Promotion, VideoPause } from '@element-plus/icons-vue'
@@ -97,7 +99,7 @@ function formatTime(s: string) {
 async function send() {
   const q = question.value.trim()
   if (!q) return
-  question.value = ''
+  question.value = '' // 先清空输入框，发送中禁用重复提交（由 store 控制）
   try {
     await chat.send(q)
   } catch (e: any) {
@@ -105,6 +107,7 @@ async function send() {
   }
 }
 
+// 快捷键：Enter 发送，Shift+Enter 换行
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
@@ -119,6 +122,7 @@ async function removeConv(id: string) {
   await chat.deleteConversation(id)
 }
 
+// 消息内容变化（流式增量）时自动滚动到底部，保证最新内容可见
 watch(
   () => chat.messages.length && chat.messages[chat.messages.length - 1]?.content,
   () => nextTick(() => messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight }))
@@ -126,6 +130,7 @@ watch(
 
 onMounted(async () => {
   await Promise.all([chat.fetchConversations(), kb.fetchKbs()])
+  // 默认选中第一个知识库，减少用户操作步骤
   if (!chat.selectedKbIds.length && kb.kbs.length) {
     chat.selectedKbIds = [kb.kbs[0].id]
   }

@@ -13,7 +13,7 @@ def test_parse_txt_utf8_and_gbk(tmp_path: Path):
     assert len(segs) == 1 and "第一段" in segs[0].text
 
     p2 = tmp_path / "b.txt"
-    # long enough sample for reliable statistical detection
+    # 样本足够长，统计探测（charset_normalizer）才能可靠识别 GBK
     p2.write_bytes(("GBK 编码的中文内容。" * 20).encode("gbk"))
     segs = parse_document("txt", p2)
     assert "GBK 编码" in segs[0].text
@@ -57,7 +57,7 @@ def test_parse_xlsx(tmp_path: Path):
     ws.title = "员工表"
     ws.append(["姓名", "部门"])
     ws.append(["张三", "研发"])
-    ws.append([None, None])  # empty row skipped
+    ws.append([None, None])  # 空行会被跳过
     ws.append(["李四", "市场"])
     path = tmp_path / "data.xlsx"
     wb.save(str(path))

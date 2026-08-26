@@ -1,4 +1,4 @@
-"""Embedding & LLM clients against the DashScope OpenAI-compatible endpoint."""
+"""向量化与模型调用客户端：对接百炼 DashScope（OpenAI 兼容端点）。"""
 import logging
 import time
 
@@ -12,6 +12,7 @@ _client: OpenAI | None = None
 
 
 def get_client() -> OpenAI:
+    """获取全局复用的 OpenAI 客户端（指向百炼兼容端点）。懒加载 + 单例。"""
     global _client
     if _client is None:
         if not settings.dashscope_api_key:
@@ -21,7 +22,11 @@ def get_client() -> OpenAI:
 
 
 def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[float]]:
-    """Batch-embed texts with retry/backoff. Returns vectors in input order."""
+    """批量文本向量化，带重试与指数退避。返回向量顺序与输入一致。
+
+    - 分批调用（默认每批 10 条），避免单次请求过大；
+    - 每批最多重试 3 次，等待 1s/2s/4s（指数退避），应对限流与瞬时故障。
+    """
     if not texts:
         return []
     client = get_client()
@@ -36,7 +41,7 @@ def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[fl
                 results.extend([d.embedding for d in resp.data])
                 last_err = None
                 break
-            except Exception as e:  # noqa: BLE001 — retry any transient error
+            except Exception as e:  # noqa: BLE001 — 任何瞬时错误都重试
                 last_err = e
                 wait = 2**attempt
                 logger.warning("embedding batch %s failed (attempt %s): %s; retry in %ss", i, attempt + 1, e, wait)
@@ -47,10 +52,15 @@ def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[fl
 
 
 def rerank(query: str, documents: list[str], top_n: int) -> list[tuple[int, float]]:
-    """Rerank documents against the query. Returns (original_index, score) sorted desc.
+    """用重排模型对候选文档按与查询的相关性精排。
 
-    Uses the DashScope rerank API (not part of the OpenAI-compatible surface).
-    Falls back to original order when disabled or on failure.
+    返回 [(原文档下标, 相关性得分), ...]，按得分降序。
+
+    重排是"粗排之后的精排"：向量检索召回的 50 条只是大致相关，
+    重排模型（cross-encoder）逐条判断相关性，显著提升最终 top_k 的质量。
+
+    注意：重排接口是百炼原生 API，不在 OpenAI 兼容层内，故单独用 httpx 调用。
+    关闭重排或调用失败时，退化为保持原检索顺序。
     """
     if not settings.rerank_enabled or not documents:
         return [(i, 1.0) for i in range(len(documents))]
@@ -72,5 +82,6 @@ def rerank(query: str, documents: list[str], top_n: int) -> list[tuple[int, floa
         results = data["output"]["results"]
         return sorted(((r["index"], r["relevance_score"]) for r in results), key=lambda x: -x[1])
     except Exception as e:  # noqa: BLE001
+        # 重排失败不阻塞主流程：退回检索原序
         logger.warning("rerank failed, falling back to retrieval order: %s", e)
         return [(i, 1.0) for i in range(min(top_n, len(documents)))]

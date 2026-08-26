@@ -1,1 +1,1 @@
-# Core package: security, deps, errors
+# 核心包：安全（JWT/密码）、依赖注入（权限）

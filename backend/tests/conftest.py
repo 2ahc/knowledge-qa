@@ -1,13 +1,13 @@
-"""Test fixtures.
+"""测试公共夹具。
 
-Tests run against a dedicated database (same server, name suffixed with _test).
-Tables are created via Base.metadata.create_all — schema correctness is covered
-by Alembic migrations separately.
+测试运行在专用数据库上（同一台服务器，库名后缀 _test）。
+表结构用 Base.metadata.create_all 直接创建 —— 迁移脚本的正确性
+由 Alembic 迁移另行保证，不在单测范围内。
 """
 import os
 import uuid
 
-os.environ["RUN_WORKER"] = "false"  # never start the embedded worker in tests
+os.environ["RUN_WORKER"] = "false"  # 测试中绝不启动内嵌 worker，避免干扰
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://kqa:kqa_pass@127.0.0.1:5432/knowledge_qa")
 
 import pytest
@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
 from app.db import Base, get_db
-import app.models  # noqa: F401  register models
+import app.models  # noqa: F401  导入以注册全部模型
 
 TEST_DB_URL = settings.database_url.rsplit("/", 1)[0] + "/knowledge_qa_test"
 
@@ -26,6 +26,7 @@ TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commi
 
 
 def _create_extensions_and_tables() -> None:
+    """先建扩展（pgvector/pg_trgm），再清空重建全部表。"""
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
@@ -36,7 +37,8 @@ def _create_extensions_and_tables() -> None:
 @pytest.fixture(scope="session", autouse=True)
 def _setup_db():
     _create_extensions_and_tables()
-    # route every SessionLocal() call (e.g. the chat SSE generator) to the test DB
+    # 把全局 SessionLocal 替换成测试库的（聊天 SSE 生成器内部会自己建 Session，
+    # 不替换就会连到正式库）
     import app.db as app_db_module
 
     app_db_module.SessionLocal = TestingSessionLocal
@@ -46,6 +48,7 @@ def _setup_db():
 
 @pytest.fixture()
 def db():
+    """每个用例一个干净的数据库：先清空全部表，再给出新 Session。"""
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE users, knowledge_bases, kb_members, documents, chunks, "
                           "conversations, messages, tasks, eval_datasets, eval_runs CASCADE"))
@@ -58,6 +61,7 @@ def db():
 
 @pytest.fixture()
 def client(db):
+    """FastAPI 测试客户端：get_db 依赖被覆盖为同一个测试 Session。"""
     from app.main import app
 
     def override_get_db():

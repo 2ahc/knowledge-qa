@@ -37,7 +37,7 @@ def test_dataset_crud(client, db):
     resp = client.get("/api/eval/datasets", headers=h)
     assert len(resp.json()) == 1
 
-    # invalid item rejected
+    # 缺少 question 的评测项被拒绝
     resp = client.post("/api/eval/datasets", json={"name": "bad", "items": [{"expect_keywords": []}]}, headers=h)
     assert resp.status_code == 400
 
@@ -82,7 +82,7 @@ def test_run_enqueues_task(client, db):
 
 
 def test_execute_eval_run_end_to_end(db, monkeypatch):
-    """Worker path: execute_eval_run with mocked model calls."""
+    """worker 执行路径：mock 掉模型调用，端到端跑通评测并校验指标。"""
     import app.services.eval as eval_mod
     from app.config import settings
     from tests.test_retrieval import rand_vector
@@ -117,7 +117,7 @@ def test_execute_eval_run_end_to_end(db, monkeypatch):
     assert run.status == TaskStatus.done
     m = run.metrics
     assert m["total"] == 2
-    assert m["retrieval_hit"] == 1  # only the first item has expect_doc
+    assert m["retrieval_hit"] == 1  # 只有第一题设置了 expect_doc
     assert m["retrieval_precision"] == 1.0
     assert m["avg_keyword_rate"] == 1.0
     assert m["avg_faithfulness"] == 5

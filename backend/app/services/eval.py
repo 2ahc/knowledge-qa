@@ -1,4 +1,9 @@
-"""Evaluation executor: retrieval hit-rate + keyword coverage + LLM judge."""
+# 评测执行器：对评测集逐题跑"检索→生成→打分"，汇总四类指标。
+#
+# 指标含义：
+#   检索命中率   —— 期望文档是否出现在检索结果里（衡量检索质量）
+#   关键词命中率 —— 期望关键词是否出现在回答里（衡量回答覆盖度）
+#   忠实性/相关性 —— LLM 裁判打分（衡量回答质量）
 import logging
 import uuid
 
@@ -15,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
+    """执行一次完整评测。由 worker 以异步任务方式调用。"""
     run = db.get(EvalRun, eval_run_id)
     if run is None:
         raise ValueError("评测任务不存在")
@@ -29,6 +35,7 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
     kb_ids = [uuid.UUID(k) for k in run.config.get("kb_ids", [])]
     top_k = run.config.get("top_k") or settings.top_k
 
+    # ---- 逐题评测 ----
     results: list[dict] = []
     for item in dataset.items:
         question = item.get("question", "").strip()
@@ -39,13 +46,16 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
 
         entry: dict = {"question": question, "expect_doc": expect_doc}
         try:
+            # 1) 与线上问答完全一致的检索链路（保证评的就是真实链路）
             query_vector = embed_texts([question])[0]
             chunks = hybrid_retrieve(db, kb_ids, question, query_vector, top_k=top_k)
 
+            # 2) 检索命中判断：期望文档名（子串匹配）是否出现在召回结果里
             retrieved_docs = [c.filename for c in chunks]
             entry["retrieved_docs"] = retrieved_docs
             entry["retrieval_hit"] = bool(expect_doc) and any(expect_doc in f for f in retrieved_docs)
 
+            # 3) 生成回答（无上下文，单轮评测）
             materials = [
                 (i + 1, c.content, f"{c.filename} {location_label(c.meta)}".strip())
                 for i, c in enumerate(chunks)
@@ -55,23 +65,25 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
             answer = "".join(stream_chat(messages)) if chunks else ""
             entry["answer"] = answer
 
+            # 4) 关键词命中：期望关键词出现在回答中的比例
             if expect_keywords:
                 hit = [kw for kw in expect_keywords if kw in answer]
                 entry["keyword_hits"] = hit
                 entry["keyword_rate"] = round(len(hit) / len(expect_keywords), 3)
+            # 5) LLM 裁判打分
             entry["scores"] = judge_answer(question, materials_text, answer) if answer else {
                 "faithfulness": 0,
                 "relevance": 0,
             }
-        except Exception as e:  # noqa: BLE001 — one bad item must not kill the run
+        except Exception as e:  # noqa: BLE001 — 单题失败不中断整个评测
             logger.exception("eval item failed: %s", question)
             entry["error"] = str(e)
         results.append(entry)
 
-    # ---- aggregate metrics ----
+    # ---- 汇总指标 ----
     total = len(results)
     retrieval_hits = sum(1 for r in results if r.get("retrieval_hit"))
-    with_expect_doc = sum(1 for r in results if r.get("expect_doc"))
+    with_expect_doc = sum(1 for r in results if r.get("expect_doc"))  # 只统计设置了期望文档的题
     keyword_rates = [r["keyword_rate"] for r in results if "keyword_rate" in r]
     faith = [r["scores"]["faithfulness"] for r in results if r.get("scores")]
     relev = [r["scores"]["relevance"] for r in results if r.get("scores")]
@@ -80,6 +92,7 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
         "total": total,
         "errors": sum(1 for r in results if r.get("error")),
         "retrieval_hit": retrieval_hits,
+        # 检索命中率 = 命中数 / 设置了期望文档的题数
         "retrieval_precision": round(retrieval_hits / with_expect_doc, 3) if with_expect_doc else None,
         "avg_keyword_rate": round(sum(keyword_rates) / len(keyword_rates), 3) if keyword_rates else None,
         "avg_faithfulness": round(sum(faith) / len(faith), 2) if faith else None,

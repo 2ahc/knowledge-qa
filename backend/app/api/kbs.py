@@ -1,3 +1,8 @@
+# 知识库接口：CRUD + 成员管理。
+# 所有接口都先过权限校验（见 core/deps.py）：
+#   读操作 —— 可见即可读（创建者/成员/公开/管理员）
+#   写操作 —— 仅创建者或管理员
+#   成员管理 —— 创建者/管理员/editor 成员
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +24,7 @@ router = APIRouter(prefix="/api/kbs", tags=["kbs"])
 
 
 def _to_out(kb: KnowledgeBase, db: Session) -> KbOut:
+    """组装知识库出参：附加实时的文档数与切片数统计。"""
     doc_count = db.scalar(select(func.count(Document.id)).where(Document.kb_id == kb.id)) or 0
     chunk_count = db.scalar(select(func.count(Chunk.id)).where(Chunk.kb_id == kb.id)) or 0
     out = KbOut.model_validate(kb)
@@ -29,6 +35,7 @@ def _to_out(kb: KnowledgeBase, db: Session) -> KbOut:
 
 @router.get("", response_model=list[KbOut])
 def list_kbs(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """列出当前用户可见的知识库（自己创建的 ∪ 作为成员的 ∪ 公开的）。"""
     stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(visible_kb_ids_query(user))).order_by(
         KnowledgeBase.created_at.desc()
     )
@@ -120,7 +127,7 @@ def add_member(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
     existing = db.get(KbMember, (kb_id, body.user_id))
     if existing is not None:
-        existing.role = body.role
+        existing.role = body.role  # 已是成员则更新角色（幂等）
     else:
         db.add(KbMember(kb_id=kb_id, user_id=body.user_id, role=body.role))
     db.commit()

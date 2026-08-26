@@ -1,3 +1,5 @@
+# Alembic 迁移环境：数据库连接信息从应用配置(settings)读取，
+# 模型元数据来自 Base.metadata（导入 app.models 完成全部模型注册）。
 from logging.config import fileConfig
 
 from alembic import context
@@ -5,7 +7,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.config import settings
 from app.db import Base
-import app.models  # noqa: F401  register all models on Base.metadata
+import app.models  # noqa: F401  导入以注册全部模型到 Base.metadata
 
 config = context.config
 

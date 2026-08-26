@@ -1,4 +1,6 @@
+/* 全局样式：主题色变量 + 基础排版 + AI 回答的 Markdown 渲染样式 */
 :root {
+  /* 主题变量：主色/背景/正文/次要文字/分割线 */
   --brand: #2f6bff;
   --brand-dark: #1e4fd6;
   --bg: #f5f7fa;
@@ -35,7 +37,7 @@ a {
   padding: 24px;
 }
 
-/* markdown body */
+/* AI 回答的 Markdown 渲染样式（配合 markdown-it 输出的 HTML） */
 .md-body {
   line-height: 1.75;
   word-break: break-word;

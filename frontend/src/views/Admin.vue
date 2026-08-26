@@ -152,6 +152,7 @@
 </template>
 
 <script setup lang="ts">
+// 管理后台（仅管理员）：用量统计 / 用户管理 / 任务监控 三个标签页。
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -162,20 +163,22 @@ import type { User } from '../api/types'
 const auth = useAuthStore()
 const tab = ref('stats')
 
-// ---- stats ----
+// ---- 用量统计 ----
 const stats = ref<any>(null)
+// 顶部四张统计卡片
 const statCards = computed(() => [
   { label: '用户数', value: stats.value?.user_count ?? '—' },
   { label: '知识库 / 文档', value: `${stats.value?.kb_count ?? '—'} / ${stats.value?.doc_count ?? '—'}` },
   { label: '总提问数', value: stats.value?.question_count ?? '—' },
   { label: '平均响应延迟', value: `${stats.value?.avg_latency_ms ?? '—'} ms` },
 ])
+// 趋势条形图宽度：按 14 天里的最大提问量等比缩放
 function barWidth(n: number) {
   const max = Math.max(1, ...(stats.value?.daily_questions || []).map((d: any) => d.questions))
   return Math.round((n / max) * 100) + '%'
 }
 
-// ---- users ----
+// ---- 用户管理（创建/编辑/启停/角色切换）----
 const users = ref<User[]>([])
 const userLoading = ref(false)
 const userDialogVisible = ref(false)
@@ -206,6 +209,7 @@ async function saveUser() {
   savingUser.value = true
   try {
     if (editingUser.value) {
+      // 编辑：密码留空则不修改
       const body: any = { display_name: userForm.value.display_name, role: userForm.value.role }
       if (userForm.value.password) body.password = userForm.value.password
       await http.patch(`/users/${editingUser.value.id}`, body)
@@ -229,7 +233,7 @@ async function toggleRole(u: User) {
   await fetchUsers()
 }
 
-// ---- tasks ----
+// ---- 任务监控（查看异步队列：索引/重建/评测的执行情况与失败原因）----
 const tasks = ref<any[]>([])
 const taskLoading = ref(false)
 async function fetchTasks() {

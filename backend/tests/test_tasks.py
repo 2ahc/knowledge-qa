@@ -12,11 +12,11 @@ def test_enqueue_and_claim(db):
     assert claimed.attempts == 1
     assert claimed.heartbeat_at is not None
 
-    # second claim gets t2, not the running t1
+    # 第二次领取拿到的是 t2（t1 已在运行中，SKIP LOCKED 语义）
     claimed2 = task_queue.claim_next(db)
     assert claimed2.id == t2.id
 
-    # queue empty now
+    # 队列已空
     assert task_queue.claim_next(db) is None
 
     task_queue.mark_done(db, t1.id)
@@ -33,12 +33,12 @@ def test_mark_failed_with_requeue(db):
     assert fresh.status == TaskStatus.queued
     assert "boom" in fresh.error
 
-    # exhaust attempts -> failed (attempts: 2, then 3 which fails the requeue)
+    # 耗尽重试次数（共 3 次尝试）后彻底失败，不再入队
     for _ in range(2):
         c = task_queue.claim_next(db)
         task_queue.mark_failed(db, c.id, "again", requeue=True)
     db.expire_all()
     final = db.get(type(t), t.id)
     assert final.status == TaskStatus.failed
-    # nothing left to claim
+    # 队列里没有可领取的任务了
     assert task_queue.claim_next(db) is None

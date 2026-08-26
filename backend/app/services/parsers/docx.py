@@ -1,3 +1,4 @@
+# Word(.docx) 解析：按标题分节提取段落，表格转成竖线分隔的文本。
 from pathlib import Path
 
 from docx import Document as DocxDocument
@@ -12,10 +13,11 @@ def parse(path: str | Path) -> list[Segment]:
         raise ParseError(f"Word 文件无法解析: {e}")
 
     segments: list[Segment] = []
-    current_heading = ""
-    buffer: list[str] = []
+    current_heading = ""  # 当前所在章节标题（作为出处元信息）
+    buffer: list[str] = []  # 当前章节累积的段落
 
     def flush():
+        """把缓冲区内容输出为一个文本段（带上章节标题元信息）。"""
         text = "\n".join(buffer).strip()
         if text:
             meta = {"heading": current_heading} if current_heading else {}
@@ -28,16 +30,18 @@ def parse(path: str | Path) -> list[Segment]:
         if not text:
             continue
         if style.startswith("heading"):
+            # 遇到标题：结束上一节，开始新的一节
             flush()
             current_heading = text
             buffer.append(text)
         else:
             buffer.append(text)
+            # 单节超过 2000 字就先落一段，避免单段过大
             if sum(len(s) for s in buffer) > 2000:
                 flush()
     flush()
 
-    # tables: row by row, pipe-separated
+    # 表格处理：每行单元格用 " | " 拼接，让切片后仍保留行列结构
     for table in doc.tables:
         rows = []
         for row in table.rows:

@@ -1,8 +1,8 @@
-"""Create the initial admin user.
+"""创建初始管理员账号。
 
-Usage (from backend/, via uv):
+用法（在 backend/ 目录下，通过 uv 执行）：
     uv run python ../scripts/create_admin.py --username admin --password <pwd>
-If --password is omitted, a random one is generated and printed.
+不传 --password 时会自动生成随机密码并打印出来。
 """
 import argparse
 import secrets

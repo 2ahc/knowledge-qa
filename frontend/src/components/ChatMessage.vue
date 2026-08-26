@@ -6,7 +6,7 @@
       <div v-else class="md-body" v-html="rendered"></div>
       <span v-if="message.streaming" class="cursor">▍</span>
 
-      <!-- citations -->
+      <!-- 回答的引用来源：编号与正文里的 [n] 标注对应，点击查看出处详情 -->
       <div v-if="message.role === 'assistant' && message.citations?.length" class="cites">
         <span class="cites-label">引用来源：</span>
         <el-tag
@@ -32,6 +32,9 @@
 </template>
 
 <script setup lang="ts">
+// 单条消息组件：
+// - 用户消息纯文本展示；AI 消息渲染 Markdown（支持 [编号] 引用标注、列表、代码块）
+// - AI 消息下方展示引用来源标签，点击弹窗查看切片原文、出处位置与相关度
 import { computed, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import type { Citation } from '../api/sse'
@@ -39,15 +42,19 @@ import type { Message } from '../api/types'
 
 const props = defineProps<{ message: Message & { streaming?: boolean } }>()
 
+// 禁用 html 注入，链接自动识别，换行转 <br>（对话场景更自然）
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
+// Markdown 渲染结果（内容变化时自动重算，流式生成时持续更新）
 const rendered = computed(() => md.render(props.message.content || ''))
 
 const citeVisible = ref(false)
 const activeCite = ref<Citation | null>(null)
 const citeTitle = computed(() => (activeCite.value ? `出处：${activeCite.value.filename}` : '出处'))
+// 重排得分(0~1)转成百分比展示
 const citeScore = computed(() => (((activeCite.value?.score ?? 0) * 100)).toFixed(0))
 
+// 点击引用标签：打开出处详情弹窗
 function openCite(c: Citation) {
   activeCite.value = c
   citeVisible.value = true

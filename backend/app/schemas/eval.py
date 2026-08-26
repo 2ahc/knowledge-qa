@@ -1,3 +1,4 @@
+# 评测相关的请求/响应模型。
 import uuid
 from datetime import datetime
 
@@ -7,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class EvalDatasetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     items: list[dict] = Field(min_length=1)
-    # each item: {"question": str, "expect_keywords": [str], "expect_doc": str}
+    # 每条评测项结构：{"question": 问题, "expect_keywords": [期望关键词], "expect_doc": 期望文档名}
 
 
 class EvalDatasetOut(BaseModel):

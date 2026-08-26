@@ -5,6 +5,7 @@ from tests.conftest import auth_headers, login, make_user
 
 
 def parse_sse(text: str) -> list[dict]:
+    """把 SSE 响应文本解析成事件字典列表（测试用）。"""
     events = []
     for line in text.splitlines():
         if line.startswith("data: "):
@@ -34,7 +35,7 @@ def test_chat_streams_and_persists(client, db, monkeypatch):
     from tests.test_retrieval import rand_vector
 
     monkeypatch.setattr(settings, "rerank_enabled", False)
-    qvec = rand_vector(3)  # same as the seeded chunk -> guaranteed retrieval hit
+    qvec = rand_vector(3)  # 与预置切片的向量相同 → 保证必然检索命中
     monkeypatch.setattr(chat_mod, "embed_texts", lambda texts: [qvec])
     monkeypatch.setattr(ret_mod, "rerank", lambda q, docs, n: [(i, 0.9) for i in range(min(n, len(docs)))])
     monkeypatch.setattr(chat_mod, "stream_chat", lambda messages: ["公司", "成立于2020年。"])
@@ -55,15 +56,15 @@ def test_chat_streams_and_persists(client, db, monkeypatch):
     assert "token" in types
     assert "done" in types
 
-    # citations carry filename + content
+    # 引用事件携带文件名（与出处内容）
     cit = next(e for e in events if e["type"] == "citations")
     assert cit["citations"][0]["filename"] == "公司介绍.txt"
 
-    # answer is the concatenation of streamed tokens
+    # 回答 = 所有 token 事件内容的拼接
     answer = "".join(e["content"] for e in events if e["type"] == "token")
     assert answer == "公司成立于2020年。"
 
-    # conversation + messages persisted
+    # 会话与消息已持久化（用户消息 + AI 回答）
     convs = client.get("/api/conversations", headers=h).json()
     assert len(convs) == 1
     assert convs[0]["message_count"] == 2
@@ -74,6 +75,7 @@ def test_chat_streams_and_persists(client, db, monkeypatch):
 
 
 def test_chat_empty_retrieval_no_generation(client, db, monkeypatch):
+    """检索为空时：走兜底话术，绝不调用大模型（防编造 + 省成本）。"""
     import app.api.chat as chat_mod
     from app.config import settings
 
@@ -98,7 +100,7 @@ def test_chat_empty_retrieval_no_generation(client, db, monkeypatch):
     )
     assert resp.status_code == 200
     events = parse_sse(resp.text)
-    assert not called["stream"], "LLM must not be called when retrieval is empty"
+    assert not called["stream"], "检索为空时不允许调用大模型"
     answer = "".join(e["content"] for e in events if e["type"] == "token")
     assert "未在所选知识库中检索到" in answer
 

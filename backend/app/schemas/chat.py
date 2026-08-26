@@ -1,3 +1,4 @@
+# 问答与会话的请求/响应模型。
 import uuid
 from datetime import datetime
 
@@ -7,9 +8,11 @@ from app.models.chat import MessageRole
 
 
 class ChatRequest(BaseModel):
+    """提问入参：问题 + 至少一个知识库 + 可选的会话（续聊）。"""
+
     question: str = Field(min_length=1, max_length=2000)
-    kb_ids: list[uuid.UUID] = Field(min_length=1)
-    conversation_id: uuid.UUID | None = None
+    kb_ids: list[uuid.UUID] = Field(min_length=1)  # 在哪些知识库里检索
+    conversation_id: uuid.UUID | None = None  # 为空则新建会话
 
 
 class ConversationOut(BaseModel):

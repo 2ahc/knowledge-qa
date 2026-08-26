@@ -1,3 +1,5 @@
+// 认证状态（Pinia）：当前用户 + 登录/登出动作。
+// 令牌存 localStorage，页面刷新后依然保持登录。
 import { defineStore } from 'pinia'
 import { http } from '../api/http'
 import type { User } from '../api/types'
@@ -13,6 +15,7 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(username: string, password: string) {
       const { data } = await http.post('/auth/login', { username, password })
+      // 双令牌落盘：access 随请求携带，refresh 过期后无感续期
       localStorage.setItem('access_token', data.access_token)
       localStorage.setItem('refresh_token', data.refresh_token)
       await this.fetchMe()

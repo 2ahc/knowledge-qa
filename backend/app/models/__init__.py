@@ -1,3 +1,4 @@
+# ORM 模型统一导出入口：导入本包即完成全部模型注册（Alembic 依赖此行为）。
 from app.models.user import User
 from app.models.kb import Chunk, Document, KbMember, KnowledgeBase
 from app.models.chat import Conversation, Message

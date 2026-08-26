@@ -1,3 +1,5 @@
+# 会话接口：历史会话列表 / 创建 / 改名 / 删除 / 查看消息。
+# 会话严格归属个人（只能操作自己的会话）。
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +16,7 @@ router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 def _to_out(conv: Conversation, db: Session) -> ConversationOut:
+    """组装会话出参：附加消息条数（侧边栏展示用）。"""
     count = db.scalar(
         select(func.count(Message.id)).where(Message.conversation_id == conv.id)
     ) or 0
@@ -23,6 +26,7 @@ def _to_out(conv: Conversation, db: Session) -> ConversationOut:
 
 
 def _get_own(conv_id: uuid.UUID, user: User, db: Session) -> Conversation:
+    """取当前用户自己的会话；不是自己的或不存在一律 404（不泄露存在性）。"""
     conv = db.get(Conversation, conv_id)
     if conv is None or conv.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "会话不存在")

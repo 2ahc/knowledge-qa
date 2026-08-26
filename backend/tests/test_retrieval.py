@@ -26,7 +26,7 @@ def test_rrf_merge_ranks():
     a = [uuid.uuid4(), uuid.uuid4()]
     b = [a[1], uuid.uuid4()]
     scores = rrf_merge([a, b], k=60)
-    # a[1] appears in both lists -> highest score
+    # a[1] 在两路结果中都出现 → 融合分最高
     assert scores[a[1]] > scores[a[0]]
 
 
@@ -52,7 +52,7 @@ def test_hybrid_retrieve_returns_matching_chunk(db, monkeypatch):
                  token_count=10, meta={"page": 2}, embedding=other))
     db.commit()
 
-    # query vector == target -> first chunk should rank first
+    # 查询向量与目标切片向量完全相同 → 该切片应排第一（余弦距离为 0）
     results = hybrid_retrieve(db, [kb.id], "公司成立于哪一年", target, top_k=2)
     assert len(results) >= 1
     assert "成立于2020" in results[0].content
@@ -78,6 +78,6 @@ def test_hybrid_retrieve_respects_kb_scope(db, monkeypatch):
                  token_count=5, meta={}, embedding=vec))
     db.commit()
 
-    # searching kb1 only must not leak kb2 chunks
+    # 库隔离：只搜 kb1，绝不能漏出 kb2 的切片
     results = hybrid_retrieve(db, [kb1.id], "另一个库的内容", vec, top_k=5)
     assert all(r.filename != "其他库.docx" for r in results)

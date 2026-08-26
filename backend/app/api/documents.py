@@ -1,3 +1,6 @@
+# 文档接口：上传 / 列表 / 重建索引 / 删除。
+# 上传是"先落库入队、后台异步索引"模式：接口立即返回，
+# 真正的解析与向量化由 worker 完成，前端轮询状态字段看进度。
 import uuid
 from pathlib import Path
 
@@ -16,6 +19,7 @@ from app.services import tasks as task_queue
 
 router = APIRouter(prefix="/api/kbs/{kb_id}/documents", tags=["documents"])
 
+# 允许上传的扩展名 → 解析器类型（见 services/parsers/__init__.py 的注册表）
 ALLOWED_EXTENSIONS = {".pdf": "pdf", ".docx": "docx", ".xlsx": "xlsx", ".md": "md", ".markdown": "md", ".txt": "txt"}
 
 
@@ -41,7 +45,7 @@ async def upload_document(
     if not can_edit_kb(kb, user, db):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "无权向该知识库上传文档")
 
-    filename = Path(file.filename or "unnamed").name  # strip any path components
+    filename = Path(file.filename or "unnamed").name  # 去掉路径成分，防止路径穿越
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -57,13 +61,14 @@ async def upload_document(
         status="pending",
     )
     db.add(doc)
-    db.flush()  # get doc.id
+    db.flush()  # 先拿到 doc.id（用于文件名），但不提交
 
-    # save file under uploads/{kb_id}/{doc_id}{ext}
+    # 文件落盘到 uploads/{kb_id}/{doc_id}{ext}：用 UUID 命名避免重名冲突
     target_dir = settings.upload_path / str(kb_id)
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{doc.id}{ext}"
 
+    # 流式写盘（每次读 1MB），边写边累计大小，超限立即中止并回滚
     size = 0
     max_bytes = settings.max_upload_mb * 1024 * 1024
     with target.open("wb") as out:
@@ -78,10 +83,11 @@ async def upload_document(
             out.write(chunk)
 
     doc.size_bytes = size
-    # store path relative to the upload root so it resolves on host and in containers
+    # 存相对路径（相对上传根目录），宿主机与容器内都能解析
     doc.stored_path = f"{kb_id}/{doc.id}{ext}"
     db.commit()
     db.refresh(doc)
+    # 入队异步索引：接口到此返回，解析/向量化在 worker 中进行
     task_queue.enqueue(db, TaskKind.document_index, {"document_id": str(doc.id)})
     return doc
 
@@ -99,6 +105,7 @@ def reindex_document(
     doc = db.get(Document, doc_id)
     if doc is None or doc.kb_id != kb_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在")
+    # 重建索引：重置状态并重新入队。索引流水线是幂等的（先删旧切片再写新切片）
     doc.status = DocStatus.pending
     doc.error = ""
     db.commit()

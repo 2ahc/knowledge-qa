@@ -1,1 +1,1 @@
-# Schemas package
+# 请求/响应模型包
