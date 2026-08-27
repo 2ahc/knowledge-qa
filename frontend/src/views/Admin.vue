@@ -4,7 +4,7 @@
 
     <el-tabs v-model="tab">
       <!-- 用量统计 -->
-      <el-tab-pane label="📈 用量统计" name="stats">
+      <el-tab-pane label="用量统计" name="stats">
         <el-row :gutter="16">
           <el-col :span="6" v-for="card in statCards" :key="card.label">
             <el-card class="stat-card">
@@ -41,7 +41,7 @@
       </el-tab-pane>
 
       <!-- 用户管理 -->
-      <el-tab-pane label="👥 用户管理" name="users">
+      <el-tab-pane label="用户管理" name="users">
         <div class="tab-toolbar">
           <el-button type="primary" @click="openCreateUser">
             <el-icon><Plus /></el-icon>&nbsp;新建用户
@@ -94,7 +94,7 @@
       </el-tab-pane>
 
       <!-- 任务监控 -->
-      <el-tab-pane label="🧾 任务监控" name="tasks">
+      <el-tab-pane label="任务监控" name="tasks">
         <div class="tab-toolbar">
           <el-button @click="fetchTasks">刷新</el-button>
         </div>
@@ -274,8 +274,11 @@ onMounted(async () => {
 
 <style scoped>
 h2 {
-  margin: 0 0 16px;
-  font-size: 18px;
+  margin: 0 0 20px;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--ink);
+  letter-spacing: 0.04em;
 }
 .stat-card {
   text-align: center;
@@ -302,7 +305,7 @@ h2 {
   justify-content: flex-end;
 }
 .err-text {
-  color: #e5484d;
+  color: var(--ink-2);
   font-size: 12px;
 }
 </style>

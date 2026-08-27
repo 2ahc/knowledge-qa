@@ -3,7 +3,7 @@
     <h2>问答评测</h2>
     <el-tabs v-model="tab">
       <!-- 数据集 -->
-      <el-tab-pane label="📋 评测集" name="datasets">
+      <el-tab-pane label="评测集" name="datasets">
         <div class="tab-toolbar">
           <el-button type="primary" @click="openCreateDs">
             <el-icon><Plus /></el-icon>&nbsp;新建评测集
@@ -27,7 +27,7 @@
       </el-tab-pane>
 
       <!-- 运行 -->
-      <el-tab-pane label="🚀 评测运行" name="runs">
+      <el-tab-pane label="评测运行" name="runs">
         <div class="tab-toolbar">
           <el-button @click="fetchRuns">刷新</el-button>
           <el-button type="primary" :disabled="!datasets.length || !kb.kbs.length" @click="openCreateRun">
@@ -326,8 +326,11 @@ onUnmounted(() => {
 
 <style scoped>
 h2 {
-  margin: 0 0 16px;
-  font-size: 18px;
+  margin: 0 0 20px;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--ink);
+  letter-spacing: 0.04em;
 }
 .tab-toolbar {
   display: flex;

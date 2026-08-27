@@ -1,30 +1,29 @@
 <template>
   <div class="msg" :class="message.role">
-    <div class="avatar">{{ message.role === 'user' ? '我' : 'AI' }}</div>
-    <div class="bubble">
+    <!-- 头像：墨黑圆（AI 为印章「问」，用户为「我」） -->
+    <div class="avatar" :class="message.role">{{ message.role === 'user' ? '我' : '问' }}</div>
+    <div class="body">
       <div v-if="message.role === 'user'" class="user-text">{{ message.content }}</div>
       <div v-else class="md-body" v-html="rendered"></div>
       <span v-if="message.streaming" class="cursor">▍</span>
 
-      <!-- 回答的引用来源：编号与正文里的 [n] 标注对应，点击查看出处详情 -->
+      <!-- 回答的引用出处：一行淡墨小字，无标签框；编号与正文 [n] 对应，点击看原文 -->
       <div v-if="message.role === 'assistant' && message.citations?.length" class="cites">
-        <span class="cites-label">引用来源：</span>
-        <el-tag
-          v-for="(c, i) in message.citations"
-          :key="c.chunk_id"
-          class="cite-tag"
-          effect="plain"
-          @click="openCite(c)"
-        >
-          [{{ i + 1 }}] {{ c.filename }}{{ c.location ? ' · ' + c.location : '' }}
-        </el-tag>
+        来源：
+        <template v-for="(c, i) in message.citations" :key="c.chunk_id">
+          <span v-if="i > 0">，</span>
+          <span class="cite-item" @click="openCite(c)">
+            [{{ i + 1 }}] {{ c.filename }}{{ c.location ? ' ' + c.location : '' }}
+          </span>
+        </template>
       </div>
     </div>
 
+    <!-- 出处详情弹窗：细描边、无重投影 -->
     <el-dialog v-model="citeVisible" :title="citeTitle" width="640px">
       <div class="cite-meta">
-        <el-tag size="small">相关度 {{ citeScore }}%</el-tag>
-        <span v-if="activeCite?.location" class="cite-loc">📍 {{ activeCite.location }}</span>
+        <span v-if="activeCite?.location" class="cite-loc">{{ activeCite.location }}</span>
+        <span class="cite-score">相关度 {{ citeScore }}%</span>
       </div>
       <pre class="cite-content">{{ activeCite?.content }}</pre>
     </el-dialog>
@@ -32,9 +31,9 @@
 </template>
 
 <script setup lang="ts">
-// 单条消息组件：
-// - 用户消息纯文本展示；AI 消息渲染 Markdown（支持 [编号] 引用标注、列表、代码块）
-// - AI 消息下方展示引用来源标签，点击弹窗查看切片原文、出处位置与相关度
+// 单条消息组件（水墨文字流，无气泡）：
+// - 用户消息墨黑靠右纯文本；AI 消息次墨靠左渲染 Markdown（支持 [编号] 引用标注）
+// - AI 消息下方一行淡墨小字展示引用出处，点击弹窗查看切片原文与相关度
 import { computed, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import type { Citation } from '../api/sse'
@@ -54,7 +53,7 @@ const citeTitle = computed(() => (activeCite.value ? `出处：${activeCite.valu
 // 重排得分(0~1)转成百分比展示
 const citeScore = computed(() => (((activeCite.value?.score ?? 0) * 100)).toFixed(0))
 
-// 点击引用标签：打开出处详情弹窗
+// 点击引用：打开出处详情弹窗
 function openCite(c: Citation) {
   activeCite.value = c
   citeVisible.value = true
@@ -64,92 +63,90 @@ function openCite(c: Citation) {
 <style scoped>
 .msg {
   display: flex;
-  gap: 12px;
-  margin-bottom: 22px;
+  gap: 14px;
+  max-width: 860px;
+  margin: 0 auto 30px;
 }
 .msg.user {
   flex-direction: row-reverse;
 }
+/* 头像：墨黑圆 */
 .avatar {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--brand);
+  font-size: 12px;
+  color: #fdfcfa;
+  background: var(--ink-2);
+  margin-top: 2px;
 }
-.msg.user .avatar {
-  background: #7c5cff;
+.avatar.assistant {
+  background: var(--ink);
+  font-family: var(--font-serif);
 }
-.bubble {
-  max-width: 76%;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 16px;
+.body {
+  flex: 1;
+  min-width: 0;
 }
-.msg.user .bubble {
-  background: #eaf1ff;
-  border-color: #d7e4ff;
-}
-.user-text {
+/* 用户问题：墨黑，行距疏朗 */
+.msg.user .user-text {
   white-space: pre-wrap;
-  line-height: 1.7;
+  line-height: 1.8;
+  color: var(--ink);
+  font-weight: 500;
+  text-align: right;
+}
+/* AI 回答：次墨文字流，无卡片包裹（样式见全局 .md-body） */
+.msg.assistant .body {
+  padding-top: 3px;
 }
 .cursor {
   display: inline-block;
   animation: blink 1s steps(1) infinite;
-  color: var(--brand);
+  color: var(--ink);
 }
 @keyframes blink {
   50% {
     opacity: 0;
   }
 }
+/* 引用出处：一行淡墨小字 */
 .cites {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--line);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.cites-label {
+  margin-top: 12px;
   font-size: 12px;
-  color: var(--sub);
+  color: var(--ink-3);
+  line-height: 1.9;
 }
-.cite-tag {
+.cite-item {
   cursor: pointer;
+  transition: color 0.2s;
 }
-.cite-tag:hover {
-  color: var(--brand);
-  border-color: var(--brand);
+.cite-item:hover {
+  color: var(--ink);
 }
 .cite-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   margin-bottom: 12px;
-}
-.cite-loc {
   font-size: 13px;
-  color: var(--sub);
+  color: var(--ink-3);
 }
 .cite-content {
-  background: #f7f8fa;
-  border-radius: 8px;
-  padding: 14px;
+  background: #f2efe8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 420px;
   overflow-y: auto;
-  line-height: 1.7;
+  line-height: 1.8;
   font-size: 13px;
+  color: var(--ink-2);
 }
 </style>

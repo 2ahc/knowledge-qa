@@ -1,85 +1,85 @@
 <template>
-  <div class="page">
-    <div class="toolbar">
-      <h2>知识库管理</h2>
-      <el-button type="primary" @click="createVisible = true">
-        <el-icon><Plus /></el-icon>&nbsp;新建知识库
-      </el-button>
-    </div>
-
-    <el-row :gutter="16">
-      <el-col v-for="kbItem in kb.kbs" :key="kbItem.id" :span="8">
-        <el-card
-          class="kb-card"
-          :class="{ selected: kbItem.id === selectedKbId }"
-          shadow="hover"
+  <div class="kb-page">
+    <!-- 左栏：知识库列表（当前墨黑加粗 + 左侧竖线） -->
+    <aside class="kb-side">
+      <div class="group-label">知识库</div>
+      <div class="kb-list">
+        <div
+          v-for="kbItem in kb.kbs"
+          :key="kbItem.id"
+          class="kb-item"
+          :class="{ active: kbItem.id === selectedKbId }"
           @click="selectKb(kbItem.id)"
         >
-          <div class="kb-head">
-            <span class="kb-name">📚 {{ kbItem.name }}</span>
-            <el-dropdown @command="(cmd: string) => onKbCommand(cmd, kbItem)">
-              <el-icon class="kb-more"><MoreFilled /></el-icon>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="members" v-if="canManage(kbItem)">成员管理</el-dropdown-item>
-                  <el-dropdown-item command="delete" v-if="canManage(kbItem)">删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-          <div class="kb-desc">{{ kbItem.description || '暂无描述' }}</div>
-          <div class="kb-meta">
-            <el-tag size="small" :type="visType(kbItem.visibility)">{{ visLabel(kbItem.visibility) }}</el-tag>
-            <span>{{ kbItem.doc_count }} 篇文档</span>
-            <span>{{ kbItem.chunk_count }} 个切片</span>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-    <el-empty v-if="!kb.kbs.length && !kb.loading" description="还没有知识库，点击右上角新建" />
+          <span class="kb-name">{{ kbItem.name }}</span>
+          <el-dropdown
+            v-if="canManage(kbItem)"
+            class="kb-more"
+            @command="(cmd: string) => onKbCommand(cmd, kbItem)"
+          >
+            <el-icon @click.stop><MoreFilled /></el-icon>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="members">成员管理</el-dropdown-item>
+                <el-dropdown-item command="delete">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+        <div v-if="!kb.kbs.length && !kb.loading" class="kb-empty">还没有知识库</div>
+      </div>
+      <button class="create-btn" @click="createVisible = true">
+        <el-icon><Plus /></el-icon>新建知识库
+      </button>
+    </aside>
 
-    <!-- 文档面板 -->
-    <el-card v-if="selectedKbId" class="doc-panel">
-      <template #header>
-        <div class="doc-head">
-          <span>📄 文档列表</span>
+    <!-- 右栏：选中库的详情与文档 -->
+    <section class="kb-main">
+      <div v-if="!selectedKb" class="kb-placeholder">
+        <p class="ph-title">从左侧选择一个知识库</p>
+        <p class="ph-sub">查看文档、上传资料、管理成员</p>
+      </div>
+
+      <template v-else>
+        <header class="kb-head">
+          <h2 class="kb-title">{{ selectedKb.name }}</h2>
+          <div class="kb-sub">
+            {{ visLabel(selectedKb.visibility) }} · {{ selectedKb.doc_count }} 篇文档
+            · {{ selectedKb.chunk_count }} 个切片
+          </div>
+          <p v-if="selectedKb.description" class="kb-desc">{{ selectedKb.description }}</p>
+        </header>
+
+        <div class="doc-toolbar">
+          <span class="doc-label">文档</span>
           <el-upload
             :show-file-list="false"
             :before-upload="onUpload"
             accept=".pdf,.docx,.xlsx,.md,.txt"
             multiple
           >
-            <el-button type="primary" plain>
-              <el-icon><Upload /></el-icon>&nbsp;上传文档（PDF/Word/Excel/Markdown/TXT）
-            </el-button>
+            <el-button size="small" plain>上传文档</el-button>
           </el-upload>
         </div>
+
+        <div class="doc-list" v-loading="docLoading">
+          <div v-if="!documents.length && !docLoading" class="doc-empty">
+            暂无文档，上传一份试试
+          </div>
+          <div v-for="doc in documents" :key="doc.id" class="doc-row">
+            <span class="doc-name" :title="doc.filename">{{ doc.filename }}</span>
+            <span class="doc-status" :class="'st-' + doc.status">{{ statusLabel(doc.status) }}</span>
+            <span class="doc-num">{{ doc.chunk_count }} 切片</span>
+            <span class="doc-num">{{ formatSize(doc.size_bytes) }}</span>
+            <span class="doc-ops">
+              <button class="op-link" @click="reindex(doc)">重建索引</button>
+              <button class="op-link" @click="removeDoc(doc)">删除</button>
+            </span>
+            <div v-if="doc.error" class="doc-err">{{ doc.error }}</div>
+          </div>
+        </div>
       </template>
-      <el-table :data="documents" v-loading="docLoading" empty-text="暂无文档，上传一份试试">
-        <el-table-column prop="filename" label="文件名" min-width="220" show-overflow-tooltip />
-        <el-table-column label="状态" width="130">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="chunk_count" label="切片数" width="90" />
-        <el-table-column label="大小" width="100">
-          <template #default="{ row }">{{ formatSize(row.size_bytes) }}</template>
-        </el-table-column>
-        <el-table-column label="错误信息" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="row.error" class="err-text">{{ row.error }}</span>
-            <span v-else class="sub-text">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150">
-          <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="reindex(row)">重建索引</el-button>
-            <el-button size="small" text type="danger" @click="removeDoc(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    </section>
 
     <!-- 成员管理对话框 -->
     <el-dialog v-model="membersVisible" :title="`成员管理：${membersKb?.name || ''}`" width="560px">
@@ -117,9 +117,7 @@
         <el-table-column prop="username" label="用户名" />
         <el-table-column label="角色" width="100">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.role === 'editor' ? 'warning' : 'info'">
-              {{ row.role === 'editor' ? '编辑' : '查看' }}
-            </el-tag>
+            <span>{{ row.role === 'editor' ? '编辑' : '查看' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="90">
@@ -156,11 +154,11 @@
 </template>
 
 <script setup lang="ts">
-// 知识库管理页：知识库卡片列表 + 选中库的文档面板 + 成员管理/新建对话框。
+// 知识库管理页：左栏知识库列表 + 右栏选中库详情（文档行列表、成员管理、新建）。
 // 文档索引是异步的，页面用 3 秒轮询刷新处于处理中的文档状态。
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadRawFile } from 'element-plus'
-import { MoreFilled, Plus, Upload } from '@element-plus/icons-vue'
+import { MoreFilled, Plus } from '@element-plus/icons-vue'
 import { http } from '../api/http'
 import { useKbStore } from '../stores/kb'
 import { useAuthStore } from '../stores/auth'
@@ -176,6 +174,8 @@ const createVisible = ref(false)
 const creating = ref(false)
 const newKb = ref({ name: '', description: '', visibility: 'private' })
 
+const selectedKb = computed(() => kb.kbs.find((k) => k.id === selectedKbId.value) || null)
+
 let pollTimer: number | undefined
 
 // 是否可管理该库（删除/成员管理）：管理员或创建者
@@ -186,16 +186,9 @@ function canManage(item: KnowledgeBase) {
 function visLabel(v: string) {
   return { private: '私有', shared: '共享', public: '公开' }[v] || v
 }
-function visType(v: string): 'info' | 'warning' | 'success' {
-  return v === 'public' ? 'success' : v === 'shared' ? 'warning' : 'info'
-}
+// 状态用纯文字三档墨色表达，不用彩色标签
 function statusLabel(s: string) {
   return { pending: '排队中', parsing: '解析中', embedding: '向量化中', done: '已完成', failed: '失败' }[s] || s
-}
-function statusType(s: string): 'info' | 'warning' | 'success' | 'danger' | 'primary' {
-  return { pending: 'info', parsing: 'warning', embedding: 'primary', done: 'success', failed: 'danger' }[
-    s
-  ] as any
 }
 function formatSize(n: number) {
   if (n < 1024) return n + ' B'
@@ -339,6 +332,10 @@ async function removeMember(row: any) {
 
 onMounted(async () => {
   await kb.fetchKbs()
+  // 默认选中第一个知识库，右栏不留空
+  if (kb.kbs.length && !selectedKbId.value) {
+    await selectKb(kb.kbs[0].id)
+  }
   // 轮询文档状态：只要有文档还在排队/解析/向量化，每 3 秒刷新一次，
   // 让索引进度实时可见；全部完成后轮询自动变为空操作
   pollTimer = window.setInterval(async () => {
@@ -358,69 +355,213 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.toolbar {
+.kb-page {
+  display: flex;
+  height: 100%;
+}
+/* 左栏 */
+.kb-side {
+  width: 260px;
+  flex: none;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 14px;
+}
+.group-label {
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: 0.2em;
+  padding: 0 12px 10px;
+}
+.kb-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.kb-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-}
-.toolbar h2 {
-  margin: 0;
-  font-size: 18px;
-}
-.kb-card {
+  padding: 9px 12px 9px 14px;
+  border-left: 2px solid transparent;
   cursor: pointer;
-  margin-bottom: 16px;
-  transition: border-color 0.15s;
+  transition: border-color 0.2s;
 }
-.kb-card.selected {
-  border-color: var(--brand);
+/* 当前库：墨黑加粗 + 左侧墨黑竖线 */
+.kb-item.active {
+  border-left-color: var(--ink);
 }
-.kb-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.kb-item.active .kb-name {
+  color: var(--ink);
+  font-weight: 600;
 }
 .kb-name {
-  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .kb-more {
-  color: var(--sub);
-  cursor: pointer;
+  color: var(--ink-3);
+  display: none;
 }
-.kb-desc {
-  color: var(--sub);
+.kb-item:hover .kb-more {
+  display: inline-flex;
+}
+.kb-more:hover {
+  color: var(--ink);
+}
+.kb-empty {
+  color: var(--ink-3);
   font-size: 12px;
-  margin: 8px 0;
-  height: 32px;
-  overflow: hidden;
+  padding: 10px 14px;
 }
-.kb-meta {
+/* 新建：墨黑小按钮 */
+.create-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 9px 0;
+  background: var(--ink);
+  color: #fdfcfa;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.create-btn:hover {
+  opacity: 0.82;
+}
+/* 右栏 */
+.kb-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 36px 48px;
+}
+.kb-placeholder {
+  margin-top: 16vh;
+  text-align: center;
+}
+.ph-title {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  color: var(--ink-2);
+  letter-spacing: 0.1em;
+  margin: 0 0 10px;
+}
+.ph-sub {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin: 0;
+}
+.kb-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.04em;
+}
+.kb-sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.kb-desc {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.8;
+  max-width: 640px;
+}
+.doc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 40px 0 6px;
+}
+.doc-label {
+  font-size: 13px;
+  color: var(--ink-3);
+  letter-spacing: 0.2em;
+}
+/* 文档行：极细线分隔，不用卡片与表格框 */
+.doc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 90px 80px 130px;
+  align-items: center;
   gap: 12px;
+  padding: 13px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.doc-row:hover .op-link {
+  opacity: 1;
+}
+.doc-name {
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 状态：纯文字三档墨色 */
+.doc-status {
   font-size: 12px;
-  color: var(--sub);
+  color: var(--ink-2);
+}
+.doc-status.st-done {
+  color: var(--ink);
+}
+.doc-status.st-pending,
+.doc-status.st-parsing,
+.doc-status.st-embedding {
+  color: var(--ink-3);
+}
+.doc-num {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.doc-ops {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.op-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+}
+.op-link:hover {
+  color: var(--ink);
+}
+.doc-err {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.doc-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13px;
 }
 .member-add {
   display: flex;
   gap: 10px;
   align-items: center;
-}
-.doc-panel {
-  margin-top: 8px;
-}
-.doc-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-weight: 700;
-}
-.err-text {
-  color: #e5484d;
-  font-size: 12px;
-}
-.sub-text {
-  color: var(--sub);
 }
 </style>

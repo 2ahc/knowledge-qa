@@ -99,7 +99,7 @@ export const useChatStore = defineStore('chat', {
                 this.fetchConversations()
               }
             } else if (ev.type === 'error') {
-              live.content += `\n\n> ⚠️ ${ev.message}`
+              live.content += `\n\n> ${ev.message}`
             }
           },
           this.controller.signal
@@ -107,7 +107,7 @@ export const useChatStore = defineStore('chat', {
       } catch (e: any) {
         // 主动停止（AbortError）不算错误，其余异常展示给用户
         if (e.name !== 'AbortError') {
-          live.content += `\n\n> ⚠️ 请求失败：${e.message}`
+          live.content += `\n\n> 请求失败：${e.message}`
         }
       } finally {
         live.streaming = false

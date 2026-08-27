@@ -1,12 +1,44 @@
-/* 全局样式：主题色变量 + 基础排版 + AI 回答的 Markdown 渲染样式 */
+/* ============================================================
+   全局样式：国风水墨主题（纸底 + 墨分五色 + 单一朱砂强调）
+   设计规范见 docs/frontend-design-spec.md
+   ============================================================ */
 :root {
-  /* 主题变量：主色/背景/正文/次要文字/分割线 */
-  --brand: #2f6bff;
-  --brand-dark: #1e4fd6;
-  --bg: #f5f7fa;
-  --ink: #26303c;
-  --sub: #8a94a6;
-  --line: #e8ecf1;
+  /* 水墨色板：墨分五色 */
+  --bg: #f7f5f1;      /* 纸底（带暖调的浅灰白，off-white） */
+  --card: #fdfcfa;    /* 卡片/面板面，极少使用 */
+  --ink: #2b2a28;     /* 墨黑：标题、品牌、主操作（off-black） */
+  --ink-2: #6e6a63;   /* 次墨：正文 / AI 回答 */
+  --ink-3: #a6a199;   /* 淡墨：占位、时间、出处、次要信息 */
+  --line: #e3ded2;    /* 细线：极细分割线 */
+  --seal: #a63a2e;    /* 朱砂：仅限印章，全站唯一强调色 */
+
+  /* 旧变量别名：未重构的页面自动跟随水墨主题 */
+  --brand: var(--ink);
+  --sub: var(--ink-3);
+
+  /* 字体：宋体（书卷气）用于品牌与标题，黑体用于正文 */
+  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+
+  /* Element Plus 主题覆盖：主色即墨色 */
+  --el-color-primary: #2b2a28;
+  --el-color-primary-light-3: #4f4c47;
+  --el-color-primary-light-5: #8b877f;
+  --el-color-primary-light-7: #c9c5bd;
+  --el-color-primary-light-8: #e9e6e0;
+  --el-color-primary-light-9: #f4f2ee;
+  --el-color-primary-dark-2: #1d1c1a;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-text-color-primary: #2b2a28;
+  --el-text-color-regular: #6e6a63;
+  --el-text-color-secondary: #a6a199;
+  --el-border-color: #e3ded2;
+  --el-border-color-light: #e3ded2;
+  --el-border-color-lighter: #ece7dc;
+  --el-fill-color-blank: #fdfcfa;
+  --el-bg-color: #fdfcfa;
+  --el-mask-color: rgba(43, 42, 40, 0.4);
 }
 
 * {
@@ -21,40 +53,75 @@ body,
 }
 
 body {
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--ink);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--brand);
+  color: var(--ink-2);
   text-decoration: none;
+  transition: color 0.2s;
+}
+a:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 
+/* 统一键盘焦点环（可访问性） */
+:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+/* 页面容器：限制宽度，四周留白充足 */
 .page {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 32px 40px;
 }
 
-/* AI 回答的 Markdown 渲染样式（配合 markdown-it 输出的 HTML） */
+/* 数据密集处用等宽数字，列对齐不乱 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* AI 回答的 Markdown 渲染（配合 markdown-it 输出的 HTML） */
 .md-body {
-  line-height: 1.75;
+  line-height: 1.8;
   word-break: break-word;
+  color: var(--ink-2);
 }
 .md-body p {
-  margin: 0.5em 0;
+  margin: 0.6em 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  margin: 0.9em 0 0.4em;
 }
 .md-body pre {
-  background: #f0f2f5;
-  border-radius: 8px;
-  padding: 12px;
+  background: #f2efe8; /* 极浅纸色，不用灰底 */
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
   overflow-x: auto;
+  font-size: 0.9em;
 }
 .md-body code {
-  background: #f0f2f5;
+  background: #f2efe8;
   border-radius: 4px;
   padding: 1px 5px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
   font-size: 0.9em;
 }
 .md-body pre code {
@@ -62,10 +129,10 @@ a {
   padding: 0;
 }
 .md-body blockquote {
-  border-left: 4px solid var(--line);
+  border-left: 2px solid var(--ink-3); /* 淡墨左边线 */
   margin: 0.6em 0;
-  padding: 2px 12px;
-  color: var(--sub);
+  padding: 2px 14px;
+  color: var(--ink-3);
 }
 .md-body table {
   border-collapse: collapse;
@@ -74,5 +141,44 @@ a {
 .md-body th,
 .md-body td {
   border: 1px solid var(--line);
-  padding: 4px 10px;
+  padding: 5px 12px;
+}
+.md-body th {
+  color: var(--ink);
+  font-weight: 600;
+}
+.md-body ul,
+.md-body ol {
+  padding-left: 1.4em;
+}
+.md-body li {
+  margin: 0.25em 0;
+}
+
+/* Element Plus 细节调整：弹窗细描边、无重投影 */
+.el-dialog {
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 30px rgba(43, 42, 40, 0.08);
+  border-radius: 6px;
+}
+.el-dialog__title {
+  color: var(--ink);
+  font-weight: 600;
+}
+.el-message-box {
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 30px rgba(43, 42, 40, 0.1);
+}
+
+/* 细滚动条，不打扰留白 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d8d2c4;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

@@ -1,10 +1,10 @@
 <template>
   <div class="chat-page">
-    <!-- 会话侧栏 -->
+    <!-- 会话侧栏：无按钮框，纯文字列表，当前项墨黑加粗 + 左侧细竖线 -->
     <aside class="side">
-      <el-button type="primary" class="new-btn" @click="chat.newConversation()">
-        <el-icon><Plus /></el-icon>&nbsp;新建对话
-      </el-button>
+      <button class="new-btn" @click="chat.newConversation()">
+        <el-icon><Plus /></el-icon>新建对话
+      </button>
       <div class="conv-list">
         <div
           v-for="conv in chat.conversations"
@@ -19,14 +19,14 @@
           </div>
           <el-icon class="conv-del" @click.stop="removeConv(conv.id)"><Delete /></el-icon>
         </div>
-        <el-empty v-if="!chat.conversations.length" description="暂无对话" :image-size="60" />
+        <div v-if="!chat.conversations.length" class="conv-empty">暂无对话</div>
       </div>
     </aside>
 
     <!-- 主区域 -->
     <section class="main-area">
       <div class="kb-bar">
-        <span class="kb-label">知识库：</span>
+        <span class="kb-label">知识库</span>
         <el-select
           v-model="chat.selectedKbIds"
           multiple
@@ -40,15 +40,14 @@
             <span class="opt-meta">{{ kb.doc_count }} 篇</span>
           </el-option>
         </el-select>
-        <el-button text type="primary" @click="$router.push('/knowledge')">管理知识库</el-button>
+        <button class="link-btn" @click="$router.push('/knowledge')">管理知识库</button>
       </div>
 
       <div class="messages" ref="messagesEl">
-        <el-empty
-          v-if="!chat.messages.length"
-          description="选择知识库，开始提问吧 🧋"
-          :image-size="90"
-        />
+        <div v-if="!chat.messages.length" class="chat-empty">
+          <p class="empty-title">选择知识库，开始提问</p>
+          <p class="empty-sub">回答将基于所选知识库的内容生成，并附引用出处</p>
+        </div>
         <ChatMessage v-for="m in chat.messages" :key="m.id" :message="m" />
       </div>
 
@@ -56,18 +55,19 @@
         <el-input
           v-model="question"
           type="textarea"
-          :rows="3"
+          :rows="2"
           resize="none"
-          placeholder="输入你的问题，Enter 发送，Shift+Enter 换行"
+          class="ink-textarea"
+          placeholder="输入你的问题，Enter 发送"
           @keydown="onKeydown"
         />
         <div class="input-actions">
-          <el-button v-if="chat.sending" type="danger" plain @click="chat.stop()">
-            <el-icon><VideoPause /></el-icon>&nbsp;停止
-          </el-button>
-          <el-button v-else type="primary" :disabled="!question.trim()" @click="send">
-            <el-icon><Promotion /></el-icon>&nbsp;发送
-          </el-button>
+          <button v-if="chat.sending" class="stop-btn" @click="chat.stop()">
+            <el-icon><VideoPause /></el-icon>停止
+          </button>
+          <button v-else class="send-dot" :disabled="!question.trim()" @click="send" aria-label="发送">
+            <el-icon><Promotion /></el-icon>
+          </button>
         </div>
       </div>
     </section>
@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-// 智能问答页：左侧会话列表 + 右侧知识库选择、消息流、输入框。
+// 智能问答页：左侧会话列表 + 右侧知识库选择、消息流、底部输入线。
 // 发送逻辑在 chat store（SSE 流式），这里只负责交互细节。
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -142,16 +142,32 @@ onMounted(async () => {
   display: flex;
   height: 100%;
 }
+/* 侧栏：与纸底同色，仅一条极细线分隔 */
 .side {
   width: 250px;
-  background: #fff;
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 18px 14px;
 }
+/* 新建对话：文字按钮，无框 */
 .new-btn {
-  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.new-btn:hover {
+  opacity: 0.65;
 }
 .conv-list {
   flex: 1;
@@ -159,21 +175,23 @@ onMounted(async () => {
 }
 .conv-item {
   position: relative;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 9px 12px 9px 14px;
+  border-left: 2px solid transparent;
   cursor: pointer;
-  margin-bottom: 6px;
-  transition: background 0.15s;
+  margin-bottom: 4px;
+  transition: border-color 0.2s;
 }
-.conv-item:hover {
-  background: #f3f6fb;
-}
+/* 当前会话：墨黑加粗 + 左侧墨黑细竖线，不用高亮块 */
 .conv-item.active {
-  background: #eaf1ff;
+  border-left-color: var(--ink);
+}
+.conv-item.active .conv-title {
+  color: var(--ink);
+  font-weight: 600;
 }
 .conv-title {
   font-size: 13px;
-  font-weight: 600;
+  color: var(--ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -181,21 +199,28 @@ onMounted(async () => {
 }
 .conv-meta {
   font-size: 11px;
-  color: var(--sub);
+  color: var(--ink-3);
   margin-top: 3px;
+  font-variant-numeric: tabular-nums;
 }
 .conv-del {
   position: absolute;
   right: 8px;
-  top: 10px;
-  color: var(--sub);
+  top: 11px;
+  color: var(--ink-3);
   display: none;
+  transition: color 0.2s;
 }
 .conv-item:hover .conv-del {
   display: block;
 }
 .conv-del:hover {
-  color: #e5484d;
+  color: var(--ink);
+}
+.conv-empty {
+  color: var(--ink-3);
+  font-size: 12px;
+  padding: 12px 14px;
 }
 .main-area {
   flex: 1;
@@ -206,34 +231,120 @@ onMounted(async () => {
 .kb-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background: #fff;
+  gap: 10px;
+  padding: 12px 28px;
   border-bottom: 1px solid var(--line);
 }
 .kb-label {
   font-size: 13px;
-  color: var(--sub);
+  color: var(--ink-3);
   white-space: nowrap;
+  letter-spacing: 0.06em;
 }
 .opt-meta {
   float: right;
   font-size: 12px;
-  color: var(--sub);
+  color: var(--ink-3);
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.link-btn:hover {
+  color: var(--ink);
 }
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 36px 48px;
 }
+/* 空状态：两行小字，克制留白 */
+.chat-empty {
+  max-width: 640px;
+  margin: 12vh auto 0;
+  text-align: center;
+}
+.empty-title {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  color: var(--ink-2);
+  letter-spacing: 0.1em;
+  margin: 0 0 10px;
+}
+.empty-sub {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin: 0;
+}
+/* 底部输入：一条极细线 + 下划线输入 + 墨黑小圆发送点 */
 .input-bar {
-  background: #fff;
   border-top: 1px solid var(--line);
-  padding: 14px 20px;
+  padding: 16px 48px 18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+.ink-textarea {
+  flex: 1;
+}
+.ink-textarea :deep(.el-textarea__inner) {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--ink-3);
+  padding: 6px 2px;
+  color: var(--ink);
+  transition: border-color 0.25s;
+}
+.ink-textarea :deep(.el-textarea__inner:focus) {
+  border-bottom-color: var(--ink);
 }
 .input-actions {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
+  align-items: center;
+  padding-bottom: 4px;
+}
+/* 发送：墨黑小圆点 */
+.send-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ink);
+  color: #fdfcfa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.send-dot:hover:not(:disabled) {
+  opacity: 0.82;
+}
+.send-dot:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.send-dot:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 4px;
+  transition: color 0.2s;
+}
+.stop-btn:hover {
+  color: var(--ink);
 }
 </style>
