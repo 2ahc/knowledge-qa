@@ -1,0 +1,33 @@
+# Docker 构建上下文排除清单（对 backend.Dockerfile 与 frontend.Dockerfile 同时生效）。
+# 作用：加快构建（不把无关文件送进上下文）+ 防止敏感内容被打进镜像层。
+
+# 版本控制与本地工具
+.git
+.gitignore
+.agents
+skills-lock.json
+
+# 环境与密钥：绝不进镜像（运行时由 env_file 注入）
+.env
+.env.*
+
+# 用户上传的企业文档：严禁打进镜像层（推送 registry 会泄露数据）
+backend/uploads
+
+# Python 虚拟环境与缓存
+.venv
+backend/.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# 前端依赖与构建产物（容器内会重新安装/构建）
+frontend/node_modules
+frontend/dist
+
+# 文档与桌面产物
+docs
+*.docx
+Dockerfile.hotfix

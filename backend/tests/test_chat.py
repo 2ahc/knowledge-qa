@@ -38,7 +38,7 @@ def test_chat_streams_and_persists(client, db, monkeypatch):
     qvec = rand_vector(3)  # 与预置切片的向量相同 → 保证必然检索命中
     monkeypatch.setattr(chat_mod, "embed_texts", lambda texts: [qvec])
     monkeypatch.setattr(ret_mod, "rerank", lambda q, docs, n: [(i, 0.9) for i in range(min(n, len(docs)))])
-    monkeypatch.setattr(chat_mod, "stream_chat", lambda messages: ["公司", "成立于2020年。"])
+    monkeypatch.setattr(chat_mod, "stream_chat", lambda messages, usage=None: ["公司", "成立于2020年。"])
 
     user = make_user(db, "alice")
     kb = _seed_kb_with_chunk(db, user)
@@ -82,7 +82,7 @@ def test_chat_empty_retrieval_no_generation(client, db, monkeypatch):
     monkeypatch.setattr(settings, "rerank_enabled", False)
     called = {"stream": False}
 
-    def fake_stream(messages):
+    def fake_stream(messages, usage=None):
         called["stream"] = True
         yield "不应生成"
 

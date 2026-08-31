@@ -1,15 +1,20 @@
 # 应用入口：创建 FastAPI 实例，注册所有路由。
 import logging
 import threading
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, chat, conversations, documents, eval, kbs, users
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# JWT 默认密钥：仅本地开发可用。生产漏配 .env 时所有令牌都可被伪造，
+# 因此在非 debug 模式下启动即失败，把配置错误挡在上线之前
+_DEFAULT_JWT_SECRET = "change-me-in-production"
 
 
 @asynccontextmanager
@@ -31,6 +36,12 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     """应用工厂：组装中间件、健康检查与全部业务路由。"""
+    # 密钥防漏配：生产模式（debug=false）下使用默认密钥直接拒绝启动
+    if settings.jwt_secret == _DEFAULT_JWT_SECRET:
+        if not settings.debug:
+            raise RuntimeError("JWT_SECRET 未配置：生产环境禁止使用默认密钥，请在 .env 中设置")
+        logger.warning("JWT_SECRET 仍为默认值，仅限本地开发；生产部署前必须更换")
+
     app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 
     # CORS：仅放行前端开发服务器（5173）。
@@ -42,6 +53,23 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def access_log(request: Request, call_next):
+        """访问日志：记录方法/路径/状态码/耗时，排查线上问题的第一手信息。
+        健康检查高频探活，不打日志。"""
+        start = time.perf_counter()
+        response = await call_next(request)
+        if not request.url.path.startswith("/api/health"):
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            logger.info(
+                "%s %s -> %s (%.1fms)",
+                request.method,
+                request.url.path,
+                response.status_code,
+                elapsed_ms,
+            )
+        return response
 
     @app.get("/api/health")
     def health():

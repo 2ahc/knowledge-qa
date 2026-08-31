@@ -95,7 +95,7 @@ cd backend && uv run python ../scripts/seed_demo.py   # 可选：种子数据
 
 ```bash
 cd backend
-uv run pytest -v        # 38 个用例：鉴权/权限/上传/切片/解析/任务队列/检索/问答/评测/管理
+uv run pytest -v        # 39 个用例：鉴权/权限/上传/切片/解析/任务队列/检索/问答/评测/管理
 ```
 
 测试使用同实例的 `knowledge_qa_test` 库（首次运行前：`docker exec kqa-postgres psql -U kqa -d knowledge_qa -c "CREATE DATABASE knowledge_qa_test;"`）。

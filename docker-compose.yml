@@ -11,16 +11,20 @@ services:
     image: pgvector/pgvector:pg16  # 自带 pgvector 扩展的官方镜像
     container_name: kqa-postgres
     environment:
-      POSTGRES_USER: kqa
-      POSTGRES_PASSWORD: kqa_pass
-      POSTGRES_DB: knowledge_qa
+      # 口令支持通过 .env / 环境变量注入（KQA_DB_PASSWORD 等），
+      # 默认值保持向后兼容；注意已初始化的数据卷不会因改口令而变更
+      POSTGRES_USER: ${KQA_DB_USER:-kqa}
+      POSTGRES_PASSWORD: ${KQA_DB_PASSWORD:-kqa_pass}
+      POSTGRES_DB: ${KQA_DB_NAME:-knowledge_qa}
     ports:
       - "5432:5432"  # 映射到宿主机，便于本地调试直连
     volumes:
       - pgdata:/var/lib/postgresql/data  # 数据持久化
     healthcheck:
       # backend/worker 依赖此健康检查：数据库就绪后才启动
-      test: ["CMD-SHELL", "pg_isready -U kqa -d knowledge_qa"]
+      # $$ 转义：让变量在容器内展开（容器环境里有 POSTGRES_USER），
+      # 否则 compose 解析期就会用宿主环境的空值替换
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -33,7 +37,7 @@ services:
     env_file: .env  # API Key、模型配置等敏感项从 .env 注入
     environment:
       # 容器内走服务名 postgres 连接数据库（覆盖 .env 里的本机地址）
-      DATABASE_URL: postgresql+psycopg://kqa:kqa_pass@postgres:5432/knowledge_qa
+      DATABASE_URL: postgresql+psycopg://${KQA_DB_USER:-kqa}:${KQA_DB_PASSWORD:-kqa_pass}@postgres:5432/${KQA_DB_NAME:-knowledge_qa}
       RUN_WORKER: "false"  # 生产环境由独立 worker 容器消费任务，避免重复消费
       UPLOAD_DIR: /app/uploads  # 容器内上传目录（与 worker 共享卷）
     volumes:
@@ -52,7 +56,7 @@ services:
     command: ["/app/.venv/bin/python", "-m", "app.worker"]  # 独立进程消费任务队列
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg://kqa:kqa_pass@postgres:5432/knowledge_qa
+      DATABASE_URL: postgresql+psycopg://${KQA_DB_USER:-kqa}:${KQA_DB_PASSWORD:-kqa_pass}@postgres:5432/${KQA_DB_NAME:-knowledge_qa}
       RUN_WORKER: "false"
       UPLOAD_DIR: /app/uploads
     volumes:

@@ -2,6 +2,7 @@
 # 核心机制：worker 用 SELECT ... FOR UPDATE SKIP LOCKED 抢任务，
 # 多个 worker 并行消费也不会重复领取同一条任务。
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -53,6 +54,32 @@ def heartbeat(db: Session, task_id: uuid.UUID) -> None:
     """更新心跳时间：长任务定期调用，证明自己还活着、不是僵死任务。"""
     db.execute(update(Task).where(Task.id == task_id).values(heartbeat_at=datetime.now(timezone.utc)))
     db.commit()
+
+
+class Heartbeat:
+    """长任务心跳节流器：在循环里随时调 beat()，
+    但只有距上次心跳超过 interval 秒才真正写库，避免高频 UPDATE。
+
+    用法（见 indexing.py / eval.py）：
+        hb = Heartbeat(db, task_id)
+        for ... : hb.beat()
+    """
+
+    def __init__(self, db: Session, task_id: uuid.UUID | None, interval: float = 60.0):
+        self._db = db
+        self._task_id = task_id
+        self._interval = interval
+        self._last = time.monotonic()
+        if task_id is not None:
+            heartbeat(db, task_id)  # 开局先跳一次，延长僵死判定的起点
+
+    def beat(self) -> None:
+        if self._task_id is None:
+            return
+        now = time.monotonic()
+        if now - self._last >= self._interval:
+            heartbeat(self._db, self._task_id)
+            self._last = now
 
 
 def mark_done(db: Session, task_id: uuid.UUID) -> None:

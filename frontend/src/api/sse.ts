@@ -23,6 +23,7 @@ export interface ChatEvent {
   citations?: Citation[]
   conversation_id?: string
   message_id?: string
+  latency_ms?: number
   message?: string
 }
 

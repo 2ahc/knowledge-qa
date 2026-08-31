@@ -1,5 +1,6 @@
 // 与后端接口对应的 TypeScript 类型定义（出参形状）。
 // 后端字段为 snake_case，这里保持一致，避免来回转换。
+import type { Citation } from './sse'
 
 // 用户
 export interface User {
@@ -50,7 +51,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  citations: any[]
+  citations: Citation[]
   latency_ms: number
   created_at: string
 }

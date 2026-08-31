@@ -48,10 +48,17 @@ class Settings(BaseSettings):
     top_k: int = 6  # 最终送给大模型的引用材料条数
     vector_top_k: int = 50  # 向量检索召回条数（粗排）
     keyword_top_k: int = 20  # 关键词检索召回条数（粗排）
+    # 重排后的相关性下限：低于该分的切片不送大模型（0 = 不过滤）。
+    # gte-rerank 得分在 0~1 之间，一般 0.2 以下的相关性已经很弱
+    rerank_min_score: float = 0.0
 
     # ---- 任务队列 ----
     task_stale_minutes: int = 30  # 任务心跳超时时间，超时视为僵死并重新入队
+    task_recover_interval: int = 60  # worker 主循环里周期性回收僵死任务的间隔（秒）
     run_worker: bool = True  # 是否在 API 进程内启动内嵌 worker 线程
+
+    # ---- 防护 ----
+    chat_rate_limit_per_minute: int = 20  # 单用户每分钟提问上限（0 = 不限流）
 
     @property
     def upload_path(self) -> Path:

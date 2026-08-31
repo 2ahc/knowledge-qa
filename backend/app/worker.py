@@ -8,6 +8,7 @@ import logging
 import time
 import uuid
 
+from app.config import settings
 from app.db import SessionLocal
 from app.models.task import TaskKind
 from app.services import tasks as task_queue
@@ -20,15 +21,16 @@ def _handle(task_id: uuid.UUID, kind: TaskKind, payload: dict) -> None:
     让用户在前端能看到具体原因（如文档状态变"失败"并带错误信息）。"""
     db = SessionLocal()
     try:
-        # 按任务类型分发到具体处理函数（延迟导入，避免循环依赖）
+        # 按任务类型分发到具体处理函数（延迟导入，避免循环依赖）。
+        # task_id 一并传入：长任务用它定期刷心跳，避免被僵死回收误杀
         if kind in (TaskKind.document_index, TaskKind.document_reindex):
             from app.services.indexing import index_document
 
-            index_document(db, uuid.UUID(payload["document_id"]))
+            index_document(db, uuid.UUID(payload["document_id"]), task_id=task_id)
         elif kind == TaskKind.eval_run:
             from app.services.eval import execute_eval_run
 
-            execute_eval_run(db, uuid.UUID(payload["eval_run_id"]))
+            execute_eval_run(db, uuid.UUID(payload["eval_run_id"]), task_id=task_id)
         else:
             raise ValueError(f"unknown task kind: {kind}")
         task_queue.mark_done(db, task_id)
@@ -61,19 +63,33 @@ def _handle(task_id: uuid.UUID, kind: TaskKind, payload: dict) -> None:
         db.close()
 
 
-def run_worker_loop(poll_interval: float = 1.0) -> None:
-    """worker 主循环：无限轮询任务队列，领到就执行，领不到就睡 1 秒。"""
-    logger.info("worker started")
-    # 启动时先回收僵死任务（上次进程崩溃时处于 running 的任务重新排队）
+def _recover_stale_once() -> None:
+    """执行一次僵死任务回收（心跳超时的 running 任务重新排队）。"""
     db = SessionLocal()
     try:
         recovered = task_queue.recover_stale(db)
         if recovered:
             logger.info("recovered %s stale tasks", recovered)
+    except Exception:  # noqa: BLE001 — 回收失败不影响主循环，下个周期再试
+        logger.exception("recover_stale failed")
     finally:
         db.close()
 
+
+def run_worker_loop(poll_interval: float = 1.0) -> None:
+    """worker 主循环：无限轮询任务队列，领到就执行，领不到就睡 1 秒。
+    同时周期性回收僵死任务（崩溃的 worker 留下的 running 任务不会永远卡死）。"""
+    logger.info("worker started")
+    # 启动时先回收一次（上次进程崩溃时处于 running 的任务重新排队）
+    _recover_stale_once()
+    last_recover = time.monotonic()
+
     while True:
+        # 周期性僵死回收：不用等 worker 重启，崩溃任务也能被其他/重启后的实例接手
+        if time.monotonic() - last_recover >= settings.task_recover_interval:
+            _recover_stale_once()
+            last_recover = time.monotonic()
+
         db = SessionLocal()
         try:
             # claim_next 使用 FOR UPDATE SKIP LOCKED 原子抢任务，

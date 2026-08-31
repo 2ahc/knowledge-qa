@@ -49,6 +49,9 @@
           <p class="empty-sub">回答将基于所选知识库的内容生成，并附引用出处</p>
         </div>
         <ChatMessage v-for="m in chat.messages" :key="m.id" :message="m" />
+        <div v-if="canRegenerate" class="regen-bar">
+          <button class="regen-btn" @click="chat.regenerate()">重新生成</button>
+        </div>
       </div>
 
       <div class="input-bar">
@@ -77,7 +80,7 @@
 <script setup lang="ts">
 // 智能问答页：左侧会话列表 + 右侧知识库选择、消息流、底部输入线。
 // 发送逻辑在 chat store（SSE 流式），这里只负责交互细节。
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Promotion, VideoPause } from '@element-plus/icons-vue'
 import { useChatStore } from '../stores/chat'
@@ -116,11 +119,22 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 async function removeConv(id: string) {
-  await ElMessageBox.confirm('确定删除该对话？历史消息将一并删除。', '删除对话', {
-    type: 'warning',
-  }).catch(() => Promise.reject())
+  // 用户点"取消"会 reject：用 try/catch 安静返回，避免未处理的 rejection
+  try {
+    await ElMessageBox.confirm('确定删除该对话？历史消息将一并删除。', '删除对话', {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
   await chat.deleteConversation(id)
 }
+
+// 最后一条是 AI 回答且空闲时，允许"重新生成"（失败/中断/不满意都能一键重来）
+const canRegenerate = computed(() => {
+  const last = chat.messages[chat.messages.length - 1]
+  return !chat.sending && !!last && last.role === 'assistant'
+})
 
 // 消息内容变化（流式增量）时自动滚动到底部，保证最新内容可见
 watch(
@@ -345,6 +359,25 @@ onMounted(async () => {
   transition: color 0.2s;
 }
 .stop-btn:hover {
+  color: var(--ink);
+}
+/* 重新生成：居中一行淡墨文字按钮 */
+.regen-bar {
+  max-width: 860px;
+  margin: 0 auto 8px;
+  text-align: center;
+}
+.regen-btn {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 4px 10px;
+  transition: color 0.2s;
+}
+.regen-btn:hover {
   color: var(--ink);
 }
 </style>

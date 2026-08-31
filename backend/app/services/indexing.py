@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.kb import Chunk, DocStatus, Document
+from app.services import tasks as task_queue
 from app.services.chunking import chunk_segments
 from app.services.embedding import embed_texts
 from app.services.parsers import parse_document
@@ -36,15 +37,19 @@ def resolve_stored_path(stored_path: str) -> Path:
     return p
 
 
-def index_document(db: Session, document_id: uuid.UUID) -> None:
+def index_document(db: Session, document_id: uuid.UUID, task_id: uuid.UUID | None = None) -> None:
     """单个文档的完整索引流水线。失败抛 IndexingError（含用户可读原因）。
 
     流程分四步，每步都会更新文档状态（前端轮询可见进度）：
       parsing(解析) → 切片 → embedding(向量化) → 写入数据库
+
+    task_id：任务队列的任务 ID（worker 调用时传入）。大文档向量化耗时可能很长，
+    流水线在每一步与每个 embedding 批次后刷心跳，避免被僵死回收误杀。
     """
     doc = db.get(Document, document_id)
     if doc is None:
         raise IndexingError("文档不存在")
+    hb = task_queue.Heartbeat(db, task_id)
 
     # --- 第 1 步：解析 --- 按文件类型选解析器，产出"带出处元信息的文本段"
     doc.status = DocStatus.parsing
@@ -63,10 +68,11 @@ def index_document(db: Session, document_id: uuid.UUID) -> None:
         raise IndexingError("文档中没有可索引的内容")
 
     # --- 第 3 步：向量化 --- 批量调用百炼 embedding 接口（耗时最长的一步）
+    # 每完成一批刷一次心跳，证明任务仍在推进
     doc.status = DocStatus.embedding
     db.commit()
     texts = [c.content for c in chunks]
-    vectors = embed_texts(texts)
+    vectors = embed_texts(texts, on_batch=lambda _done: hb.beat())
 
     # --- 第 4 步：入库 --- 幂等设计：先删旧切片再写新切片，
     # 因此"重建索引"可以安全地重复执行，不会产生脏数据

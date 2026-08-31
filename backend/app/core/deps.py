@@ -27,7 +27,12 @@ def get_current_user(
         payload = decode_token(credentials.credentials, token_type="access")
     except pyjwt.PyJWTError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"凭证无效或已过期: {e}")
-    user = db.get(User, uuid.UUID(payload["sub"]))
+    try:
+        # 伪造/损坏的令牌 sub 可能不是合法 UUID：按凭证无效处理（401），不抛 500
+        user_id = uuid.UUID(str(payload.get("sub", "")))
+    except (ValueError, AttributeError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "凭证无效")
+    user = db.get(User, user_id)
     # 令牌有效但用户已被删除/停用，同样拒绝
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户不存在或已停用")

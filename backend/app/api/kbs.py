@@ -3,12 +3,14 @@
 #   读操作 —— 可见即可读（创建者/成员/公开/管理员）
 #   写操作 —— 仅创建者或管理员
 #   成员管理 —— 创建者/管理员/editor 成员
+import shutil
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.deps import (
     can_edit_kb,
     get_accessible_kb,
@@ -23,8 +25,29 @@ from app.schemas.kb import KbCreate, KbOut, KbUpdate, MemberCreate, MemberOut
 router = APIRouter(prefix="/api/kbs", tags=["kbs"])
 
 
+def _kb_counts(db: Session, kb_ids: list[uuid.UUID]) -> tuple[dict, dict]:
+    """批量统计文档数与切片数（两条 GROUP BY 查询，替代逐库 count 的 N+1）。"""
+    if not kb_ids:
+        return {}, {}
+    doc_counts = dict(
+        db.execute(
+            select(Document.kb_id, func.count(Document.id))
+            .where(Document.kb_id.in_(kb_ids))
+            .group_by(Document.kb_id)
+        ).all()
+    )
+    chunk_counts = dict(
+        db.execute(
+            select(Chunk.kb_id, func.count(Chunk.id))
+            .where(Chunk.kb_id.in_(kb_ids))
+            .group_by(Chunk.kb_id)
+        ).all()
+    )
+    return doc_counts, chunk_counts
+
+
 def _to_out(kb: KnowledgeBase, db: Session) -> KbOut:
-    """组装知识库出参：附加实时的文档数与切片数统计。"""
+    """组装知识库出参：附加实时的文档数与切片数统计（单库场景用）。"""
     doc_count = db.scalar(select(func.count(Document.id)).where(Document.kb_id == kb.id)) or 0
     chunk_count = db.scalar(select(func.count(Chunk.id)).where(Chunk.kb_id == kb.id)) or 0
     out = KbOut.model_validate(kb)
@@ -39,7 +62,16 @@ def list_kbs(user: User = Depends(get_current_user), db: Session = Depends(get_d
     stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(visible_kb_ids_query(user))).order_by(
         KnowledgeBase.created_at.desc()
     )
-    return [_to_out(kb, db) for kb in db.scalars(stmt).all()]
+    kbs = list(db.scalars(stmt).all())
+    # 列表场景批量聚合统计，避免"每个库两次 count"的 N+1 查询
+    doc_counts, chunk_counts = _kb_counts(db, [kb.id for kb in kbs])
+    outs: list[KbOut] = []
+    for kb in kbs:
+        out = KbOut.model_validate(kb)
+        out.doc_count = doc_counts.get(kb.id, 0)
+        out.chunk_count = chunk_counts.get(kb.id, 0)
+        outs.append(out)
+    return outs
 
 
 @router.post("", response_model=KbOut, status_code=status.HTTP_201_CREATED)
@@ -94,6 +126,9 @@ def delete_kb(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "只有创建者或管理员可以删除知识库")
     db.delete(kb)
     db.commit()
+    # 清理磁盘：删除该库的上传目录（数据库行已级联删除，
+    # 但原始文件在 uploads/{kb_id}/ 下，不清理会长期残留）
+    shutil.rmtree(settings.upload_path / str(kb_id), ignore_errors=True)
 
 
 @router.get("/{kb_id}/members", response_model=list[MemberOut])

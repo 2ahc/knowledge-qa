@@ -1,6 +1,8 @@
 # 认证接口：登录、刷新令牌、当前用户、登出。
 # 采用双令牌模式：access（短期，2 小时）携带在请求头；
 # refresh（长期，7 天）仅在 access 过期后用于无感换新。
+import uuid
+
 import jwt as pyjwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -38,7 +40,12 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
         payload = decode_token(body.refresh_token, token_type="refresh")
     except pyjwt.PyJWTError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"refresh token 无效: {e}")
-    user = db.get(User, payload["sub"])
+    try:
+        # 损坏的令牌 sub 可能不是合法 UUID：按无效处理（401），不抛 500
+        user_id = uuid.UUID(str(payload.get("sub", "")))
+    except (ValueError, AttributeError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "refresh token 无效")
+    user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户不存在或已停用")
     return TokenPair(

@@ -17,6 +17,13 @@
           </span>
         </template>
       </div>
+      <!-- 生成耗时：流结束后的一行淡墨小字 -->
+      <div
+        v-if="message.role === 'assistant' && !message.streaming && message.latency_ms > 0"
+        class="latency"
+      >
+        耗时 {{ (message.latency_ms / 1000).toFixed(1) }} 秒
+      </div>
     </div>
 
     <!-- 出处详情弹窗：细描边、无重投影 -->
@@ -34,7 +41,7 @@
 // 单条消息组件（水墨文字流，无气泡）：
 // - 用户消息墨黑靠右纯文本；AI 消息次墨靠左渲染 Markdown（支持 [编号] 引用标注）
 // - AI 消息下方一行淡墨小字展示引用出处，点击弹窗查看切片原文与相关度
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import type { Citation } from '../api/sse'
 import type { Message } from '../api/types'
@@ -44,8 +51,32 @@ const props = defineProps<{ message: Message & { streaming?: boolean } }>()
 // 禁用 html 注入，链接自动识别，换行转 <br>（对话场景更自然）
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
-// Markdown 渲染结果（内容变化时自动重算，流式生成时持续更新）
-const rendered = computed(() => md.render(props.message.content || ''))
+// Markdown 渲染结果：流式生成时做节流（每个 token 都全量渲染会让长回答卡顿），
+// 最多每 120ms 渲染一次；流结束后立即渲染最终稿
+const rendered = ref(md.render(props.message.content || ''))
+let renderTimer: number | null = null
+watch(
+  () => props.message.content,
+  (v) => {
+    if (!props.message.streaming) {
+      if (renderTimer !== null) {
+        clearTimeout(renderTimer)
+        renderTimer = null
+      }
+      rendered.value = md.render(v || '')
+      return
+    }
+    if (renderTimer === null) {
+      renderTimer = window.setTimeout(() => {
+        renderTimer = null
+        rendered.value = md.render(props.message.content || '')
+      }, 120)
+    }
+  }
+)
+onUnmounted(() => {
+  if (renderTimer !== null) clearTimeout(renderTimer)
+})
 
 const citeVisible = ref(false)
 const activeCite = ref<Citation | null>(null)
@@ -127,6 +158,13 @@ function openCite(c: Citation) {
 }
 .cite-item:hover {
   color: var(--ink);
+}
+/* 耗时：一行淡墨小字 */
+.latency {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
 .cite-meta {
   display: flex;

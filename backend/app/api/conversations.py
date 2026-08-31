@@ -36,7 +36,21 @@ def _get_own(conv_id: uuid.UUID, user: User, db: Session) -> Conversation:
 @router.get("", response_model=list[ConversationOut])
 def list_conversations(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     stmt = select(Conversation).where(Conversation.user_id == user.id).order_by(Conversation.created_at.desc())
-    return [_to_out(c, db) for c in db.scalars(stmt).all()]
+    convs = list(db.scalars(stmt).all())
+    # 批量聚合消息数（一条 GROUP BY），避免"每个会话一次 count"的 N+1
+    counts = dict(
+        db.execute(
+            select(Message.conversation_id, func.count(Message.id))
+            .where(Message.conversation_id.in_([c.id for c in convs]))
+            .group_by(Message.conversation_id)
+        ).all()
+    ) if convs else {}
+    outs: list[ConversationOut] = []
+    for c in convs:
+        out = ConversationOut.model_validate(c)
+        out.message_count = counts.get(c.id, 0)
+        outs.append(out)
+    return outs
 
 
 @router.post("", response_model=ConversationOut, status_code=status.HTTP_201_CREATED)

@@ -106,7 +106,9 @@ def test_execute_eval_run_end_to_end(db, monkeypatch):
     db.commit()
 
     monkeypatch.setattr(eval_mod, "embed_texts", lambda texts: [vec])
-    monkeypatch.setattr(eval_mod, "stream_chat", lambda messages: iter(["成立于2020年。"]))
+    monkeypatch.setattr(
+        eval_mod, "complete_chat", lambda messages: ("成立于2020年。", {"prompt_tokens": 12, "completion_tokens": 6})
+    )
     monkeypatch.setattr(
         eval_mod, "judge_answer", lambda q, m, a: {"faithfulness": 5, "relevance": 4}
     )
@@ -121,6 +123,9 @@ def test_execute_eval_run_end_to_end(db, monkeypatch):
     assert m["retrieval_precision"] == 1.0
     assert m["avg_keyword_rate"] == 1.0
     assert m["avg_faithfulness"] == 5
+    # token 用量随回答一并汇总（两条题各调用一次生成：12*2 / 6*2）
+    assert m["prompt_tokens"] == 24
+    assert m["completion_tokens"] == 12
     assert len(run.results) == 2
     first = run.results[0]
     assert first["retrieval_hit"] is True

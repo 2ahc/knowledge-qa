@@ -12,21 +12,27 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.eval import EvalDataset, EvalRun
 from app.models.task import TaskStatus
+from app.services import tasks as task_queue
 from app.services.embedding import embed_texts
-from app.services.llm import build_chat_messages, judge_answer, stream_chat
+from app.services.llm import build_chat_messages, complete_chat, judge_answer
 from app.services.retrieval import hybrid_retrieve, location_label
 
 logger = logging.getLogger(__name__)
 
 
-def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
-    """执行一次完整评测。由 worker 以异步任务方式调用。"""
+def execute_eval_run(db: Session, eval_run_id: uuid.UUID, task_id: uuid.UUID | None = None) -> None:
+    """执行一次完整评测。由 worker 以异步任务方式调用。
+
+    task_id：任务队列的任务 ID（worker 调用时传入）。评测逐题执行、耗时较长，
+    每题结束刷一次心跳，避免被僵死回收误杀。
+    """
     run = db.get(EvalRun, eval_run_id)
     if run is None:
         raise ValueError("评测任务不存在")
     dataset = db.get(EvalDataset, run.dataset_id)
     if dataset is None:
         raise ValueError("评测数据集不存在")
+    hb = task_queue.Heartbeat(db, task_id)
 
     run.status = TaskStatus.running
     run.error = ""
@@ -37,6 +43,8 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
 
     # ---- 逐题评测 ----
     results: list[dict] = []
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
     for item in dataset.items:
         question = item.get("question", "").strip()
         expect_keywords: list[str] = item.get("expect_keywords") or []
@@ -55,14 +63,16 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
             entry["retrieved_docs"] = retrieved_docs
             entry["retrieval_hit"] = bool(expect_doc) and any(expect_doc in f for f in retrieved_docs)
 
-            # 3) 生成回答（无上下文，单轮评测）
+            # 3) 生成回答：评测是批量场景，用非流式补全（比流式更快更省连接）
             materials = [
                 (i + 1, c.content, f"{c.filename} {location_label(c.meta)}".strip())
                 for i, c in enumerate(chunks)
             ]
             materials_text = "\n\n".join(f"[{i}] {content}" for i, content, _ in materials)
             messages = build_chat_messages([], question, materials)
-            answer = "".join(stream_chat(messages)) if chunks else ""
+            answer, usage = complete_chat(messages) if chunks else ("", {})
+            total_prompt_tokens += usage.get("prompt_tokens", 0)
+            total_completion_tokens += usage.get("completion_tokens", 0)
             entry["answer"] = answer
 
             # 4) 关键词命中：期望关键词出现在回答中的比例
@@ -79,6 +89,7 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
             logger.exception("eval item failed: %s", question)
             entry["error"] = str(e)
         results.append(entry)
+        hb.beat()  # 每题刷一次心跳
 
     # ---- 汇总指标 ----
     total = len(results)
@@ -97,6 +108,9 @@ def execute_eval_run(db: Session, eval_run_id: uuid.UUID) -> None:
         "avg_keyword_rate": round(sum(keyword_rates) / len(keyword_rates), 3) if keyword_rates else None,
         "avg_faithfulness": round(sum(faith) / len(faith), 2) if faith else None,
         "avg_relevance": round(sum(relev) / len(relev), 2) if relev else None,
+        # 本次评测消耗的 token 总量（生成回答部分，不含裁判调用）
+        "prompt_tokens": total_prompt_tokens,
+        "completion_tokens": total_completion_tokens,
     }
     run.results = results
     run.status = TaskStatus.done

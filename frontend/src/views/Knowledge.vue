@@ -231,9 +231,14 @@ async function onKbCommand(cmd: string, item: KnowledgeBase) {
   if (cmd === 'members') {
     await openMembers(item)
   } else if (cmd === 'delete') {
-    await ElMessageBox.confirm(`删除知识库「${item.name}」？其所有文档与向量将一并删除。`, '危险操作', {
-      type: 'warning',
-    }).catch(() => Promise.reject())
+    // 用户点"取消"会 reject：try/catch 安静返回，避免未处理的 rejection
+    try {
+      await ElMessageBox.confirm(`删除知识库「${item.name}」？其所有文档与向量将一并删除。`, '危险操作', {
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
     await kb.deleteKb(item.id)
     if (selectedKbId.value === item.id) {
       selectedKbId.value = null
@@ -266,9 +271,11 @@ async function reindex(doc: DocumentItem) {
 
 async function removeDoc(doc: DocumentItem) {
   if (!selectedKbId.value) return
-  await ElMessageBox.confirm(`删除文档「${doc.filename}」？`, '删除文档', { type: 'warning' }).catch(() =>
-    Promise.reject()
-  )
+  try {
+    await ElMessageBox.confirm(`删除文档「${doc.filename}」？`, '删除文档', { type: 'warning' })
+  } catch {
+    return // 用户取消
+  }
   await kb.deleteDocument(selectedKbId.value, doc.id)
   await refreshDocs()
   await kb.fetchKbs()

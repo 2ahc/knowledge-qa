@@ -1,5 +1,6 @@
 # 混合检索：向量检索 + 关键词检索 → RRF 融合 → 重排，产出最终引用材料。
 # 这是决定回答质量的核心环节。
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -50,6 +51,22 @@ def rrf_merge(ranked_lists: list[list[uuid.UUID]], k: int = 60) -> dict[uuid.UUI
     return scores
 
 
+def query_fragments(query: str, max_frags: int = 6) -> list[str]:
+    """把查询拆成用于 trigram 匹配的文本片段。
+
+    pg_trgm 对"整个问题长句"算相似度时，长查询会被稀释（分母大、得分低）。
+    拆成短句/词后取各片段相似度的最大值，长查询也能命中只包含其中
+    一个短语的切片。规则：按空白与中文标点切分，保留 ≥2 字的片段，
+    最多取前 max_frags 个；整句永远参与匹配兜底。
+    """
+    parts = re.split(r"[\s，。？！、；：,.?!;:\"'“”‘’（）()\[\]【】]+", query.strip())
+    frags = [p for p in parts if len(p) >= 2][:max_frags]
+    whole = query.strip()
+    if whole and whole not in frags:
+        frags.insert(0, whole)
+    return frags or ([whole] if whole else [])
+
+
 def hybrid_retrieve(
     db: Session,
     kb_ids: list[uuid.UUID],
@@ -78,7 +95,10 @@ def hybrid_retrieve(
     vec_rows = db.execute(vec_stmt).all()
 
     # --- 第二路：关键词检索（pg_trgm 三元组相似度，走 GIN 索引）---
-    sim = func.similarity(Chunk.content, query)
+    # 对查询做分片：取"整句与各片段"相似度中的最大值作为该切片的关键词得分，
+    # 解决长查询被 trigram 稀释、召回变弱的问题
+    frags = query_fragments(query)
+    sim = func.greatest(*[func.similarity(Chunk.content, f) for f in frags]) if frags else func.similarity(Chunk.content, query)
     kw_stmt = (
         select(Chunk, Document.filename)
         .join(Document, Chunk.document_id == Document.id)
@@ -103,12 +123,19 @@ def hybrid_retrieve(
     candidates = sorted(rrf_scores.items(), key=lambda x: -x[1])[:20]
 
     # --- 重排（精排）：cross-encoder 逐条打分，质量远高于粗排 ---
+    reranked = False
     if settings.rerank_enabled and candidates:
         docs = [chunk_map[cid][0].content for cid, _ in candidates]
         ranked = rerank(query, docs, top_k)
         final = [(candidates[idx][0], score) for idx, score in ranked]
+        reranked = True
     else:
         final = candidates[:top_k]
+
+    # 相关性下限：重排得分低于阈值的切片不喂给大模型（0 = 不过滤）。
+    # 只对重排路径生效：RRF 融合分与重排分不同量纲
+    if reranked and settings.rerank_min_score > 0:
+        final = [(cid, score) for cid, score in final if score >= settings.rerank_min_score]
 
     # 组装最终结果
     results: list[RetrievedChunk] = []

@@ -55,20 +55,48 @@ def build_chat_messages(
     return [{"role": "system", "content": system}] + history + [{"role": "user", "content": question}]
 
 
-def stream_chat(messages: list[dict]) -> Iterator[str]:
-    """调用大模型流式生成，逐块产出回答文本（供 SSE 逐字推送给前端）。"""
+def stream_chat(messages: list[dict], usage: dict | None = None) -> Iterator[str]:
+    """调用大模型流式生成，逐块产出回答文本（供 SSE 逐字推送给前端）。
+
+    usage：可选的出参字典。开启 stream_options 后，最后一个 chunk 会携带
+    token 用量，这里解析并写入 {"prompt_tokens", "completion_tokens"}，
+    供调用方落库做用量统计。
+    """
     client = get_client()
     stream = client.chat.completions.create(
         model=settings.llm_model,
         messages=messages,
         stream=True,
+        # 让流的最后一个 chunk 携带 usage（token 用量），用于统计
+        stream_options={"include_usage": True},
     )
     for chunk in stream:
+        # 用量 chunk：choices 为空、usage 有值（在流末尾出现）
+        chunk_usage = getattr(chunk, "usage", None)
+        if usage is not None and chunk_usage is not None:
+            usage["prompt_tokens"] = getattr(chunk_usage, "prompt_tokens", 0) or 0
+            usage["completion_tokens"] = getattr(chunk_usage, "completion_tokens", 0) or 0
         if not chunk.choices:
             continue
         delta = chunk.choices[0].delta
         if delta is not None and delta.content:
             yield delta.content
+
+
+def complete_chat(messages: list[dict]) -> tuple[str, dict]:
+    """非流式补全，返回 (回答文本, token 用量)。
+
+    评测等批量场景用：不需要打字机效果，一次性拿完整回答更快更省连接。
+    """
+    client = get_client()
+    resp = client.chat.completions.create(model=settings.llm_model, messages=messages)
+    usage: dict = {}
+    if getattr(resp, "usage", None) is not None:
+        usage = {
+            "prompt_tokens": getattr(resp.usage, "prompt_tokens", 0) or 0,
+            "completion_tokens": getattr(resp.usage, "completion_tokens", 0) or 0,
+        }
+    return (resp.choices[0].message.content or ""), usage
 
 
 def last_messages(db, conversation_id, limit: int = 20) -> list[Message]:

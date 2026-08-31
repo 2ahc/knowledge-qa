@@ -1,6 +1,7 @@
 """向量化与模型调用客户端：对接百炼 DashScope（OpenAI 兼容端点）。"""
 import logging
 import time
+from collections.abc import Callable
 
 from openai import OpenAI
 
@@ -21,11 +22,16 @@ def get_client() -> OpenAI:
     return _client
 
 
-def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[float]]:
+def embed_texts(
+    texts: list[str],
+    batch_size: int | None = None,
+    on_batch: Callable[[int], None] | None = None,
+) -> list[list[float]]:
     """批量文本向量化，带重试与指数退避。返回向量顺序与输入一致。
 
     - 分批调用（默认每批 10 条），避免单次请求过大；
-    - 每批最多重试 3 次，等待 1s/2s/4s（指数退避），应对限流与瞬时故障。
+    - 每批最多重试 3 次，等待 1s/2s/4s（指数退避），应对限流与瞬时故障；
+    - on_batch(已完成条数)：每批成功后的回调，长任务用它刷心跳（见 indexing.py）。
     """
     if not texts:
         return []
@@ -38,7 +44,13 @@ def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[fl
         for attempt in range(3):
             try:
                 resp = client.embeddings.create(model=settings.embed_model, input=batch)
-                results.extend([d.embedding for d in resp.data])
+                # 校验返回条数与输入一致，防止接口异常时 zip 静默错位/丢数据
+                if len(resp.data) != len(batch):
+                    raise RuntimeError(
+                        f"embedding 返回条数异常: 期望 {len(batch)} 条，实际 {len(resp.data)} 条"
+                    )
+                # 按 index 排序兜底（正常返回本就有序，防御接口乱序）
+                results.extend([d.embedding for d in sorted(resp.data, key=lambda d: d.index)])
                 last_err = None
                 break
             except Exception as e:  # noqa: BLE001 — 任何瞬时错误都重试
@@ -48,6 +60,8 @@ def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[fl
                 time.sleep(wait)
         if last_err is not None:
             raise RuntimeError(f"文本向量化失败: {last_err}")
+        if on_batch is not None:
+            on_batch(len(results))
     return results
 
 
