@@ -20,6 +20,17 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem('refresh_token', data.refresh_token)
       await this.fetchMe()
     },
+    // 注册：后端只允许创建普通用户，成功即签发双令牌（无需再登录一次）
+    async register(username: string, password: string, displayName: string) {
+      const { data } = await http.post('/auth/register', {
+        username,
+        password,
+        display_name: displayName || undefined,
+      })
+      localStorage.setItem('access_token', data.access_token)
+      localStorage.setItem('refresh_token', data.refresh_token)
+      await this.fetchMe()
+    },
     async fetchMe() {
       const { data } = await http.get('/auth/me')
       this.user = data

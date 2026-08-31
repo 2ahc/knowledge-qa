@@ -1,6 +1,6 @@
 <template>
   <div class="login-wrap">
-    <!-- 右上：一笔极浅淡墨远山剪影（装饰，低透明度） -->
+    <!-- 右上：一笔极浅淡墨远山剪影（与登录页同构图，保持系列感） -->
     <svg class="mountains" viewBox="0 0 600 260" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
       <path
         d="M0 260 L120 118 Q160 74 200 118 L268 196 L330 128 Q368 88 406 128 L520 252 L600 260 Z"
@@ -14,11 +14,11 @@
       />
     </svg>
 
-    <!-- 左下：登录内容，非对称偏置 -->
+    <!-- 左下：注册内容，非对称偏置 -->
     <div class="login-content">
       <SealLogo :size="48" />
-      <h1>企业知识问答</h1>
-      <p class="sub">基于企业知识库的智能问答系统</p>
+      <h1>创建账号</h1>
+      <p class="sub">注册后即可使用知识库问答（普通用户）</p>
 
       <el-form @submit.prevent="onSubmit" label-position="top" class="login-form">
         <el-form-item label="用户名">
@@ -27,6 +27,17 @@
             size="large"
             class="ink-input"
             autocomplete="username"
+            placeholder="2-20 位，字母 / 数字 / 下划线 / 中文"
+            @keyup.enter="onSubmit"
+          />
+        </el-form-item>
+        <el-form-item label="显示名（选填）">
+          <el-input
+            v-model="displayName"
+            size="large"
+            class="ink-input"
+            autocomplete="nickname"
+            placeholder="留空则使用用户名"
             @keyup.enter="onSubmit"
           />
         </el-form-item>
@@ -37,15 +48,27 @@
             size="large"
             class="ink-input"
             show-password
-            autocomplete="current-password"
+            autocomplete="new-password"
+            placeholder="至少 6 位"
+            @keyup.enter="onSubmit"
+          />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input
+            v-model="confirm"
+            type="password"
+            size="large"
+            class="ink-input"
+            show-password
+            autocomplete="new-password"
             @keyup.enter="onSubmit"
           />
         </el-form-item>
         <el-button type="primary" size="large" class="login-btn" :loading="loading" @click="onSubmit">
-          登 录
+          注 册
         </el-button>
         <p class="switch-line">
-          还没有账号？<a class="switch-link" @click="router.push('/register')">注册一个</a>
+          已有账号？<a class="switch-link" @click="router.push('/login')">直接登录</a>
         </p>
       </el-form>
     </div>
@@ -55,7 +78,8 @@
 </template>
 
 <script setup lang="ts">
-// 登录页：水墨非对称构图。内容偏置左下，右上淡墨远山，无卡片无投影。
+// 注册页：与登录页同构图（左下内容 + 右上远山）。
+// 注册只能创建普通用户——角色由后端写死，前端不提供角色选项。
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -65,21 +89,32 @@ import SealLogo from '../components/SealLogo.vue'
 const auth = useAuthStore()
 const router = useRouter()
 const username = ref('')
+const displayName = ref('')
 const password = ref('')
+const confirm = ref('')
 const loading = ref(false)
 
 async function onSubmit() {
-  if (!username.value || !password.value) {
-    ElMessage.warning('请输入用户名和密码')
+  // 前端先做基础校验，减少无谓请求（后端有同样的规则兜底）
+  if (!/^\w{2,20}$/.test(username.value)) {
+    ElMessage.warning('用户名需为 2-20 位字母、数字、下划线或中文')
+    return
+  }
+  if (password.value.length < 6) {
+    ElMessage.warning('密码至少 6 位')
+    return
+  }
+  if (password.value !== confirm.value) {
+    ElMessage.warning('两次输入的密码不一致')
     return
   }
   loading.value = true
   try {
-    await auth.login(username.value, password.value)
-    ElMessage.success('登录成功')
+    await auth.register(username.value, password.value, displayName.value.trim())
+    ElMessage.success('注册成功，已为你登录')
     router.push('/chat')
   } catch {
-    /* 登录失败的提示由 axios 拦截器统一弹出 */
+    /* 错误提示由 axios 拦截器统一弹出（如"用户名已被占用"） */
   } finally {
     loading.value = false
   }
@@ -108,7 +143,7 @@ async function onSubmit() {
   position: relative;
   width: 360px;
   margin-left: 10vw;
-  margin-bottom: 14vh;
+  margin-bottom: 8vh;
 }
 h1 {
   margin: 22px 0 6px;
@@ -122,7 +157,7 @@ h1 {
   color: var(--ink-3);
   font-size: 13px;
   letter-spacing: 0.06em;
-  margin: 0 0 42px;
+  margin: 0 0 34px;
 }
 /* 标签在输入框上方；输入框无底色无边框，仅底部极细墨线 */
 .login-form :deep(.el-form-item__label) {
@@ -132,7 +167,7 @@ h1 {
   line-height: 1.4;
 }
 .login-form :deep(.el-form-item) {
-  margin-bottom: 26px;
+  margin-bottom: 22px;
 }
 .ink-input :deep(.el-input__wrapper) {
   background: transparent;
@@ -147,6 +182,10 @@ h1 {
 }
 .ink-input :deep(.el-input__inner) {
   color: var(--ink);
+}
+.ink-input :deep(.el-input__inner::placeholder) {
+  color: var(--ink-3);
+  opacity: 0.7;
 }
 /* 主按钮：墨底白字通栏 */
 .login-btn {

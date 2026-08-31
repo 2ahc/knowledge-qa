@@ -95,7 +95,7 @@ cd backend && uv run python ../scripts/seed_demo.py   # 可选：种子数据
 
 ```bash
 cd backend
-uv run pytest -v        # 39 个用例：鉴权/权限/上传/切片/解析/任务队列/检索/问答/评测/管理
+uv run pytest -v        # 43 个用例：鉴权/注册/权限/上传/切片/解析/任务队列/检索/问答/评测/管理
 ```
 
 测试使用同实例的 `knowledge_qa_test` 库（首次运行前：`docker exec kqa-postgres psql -U kqa -d knowledge_qa -c "CREATE DATABASE knowledge_qa_test;"`）。
@@ -104,7 +104,7 @@ uv run pytest -v        # 39 个用例：鉴权/权限/上传/切片/解析/任�
 
 | 模块 | 端点 |
 |---|---|
-| 认证 | `POST /api/auth/login` `refresh` `logout`，`GET /api/auth/me` |
+| 认证 | `POST /api/auth/register`（仅限普通用户）`login` `refresh` `logout`，`GET /api/auth/me` |
 | 用户 | `GET/POST /api/users`，`PATCH /api/users/{id}`（admin） |
 | 知识库 | `GET/POST /api/kbs`，`PATCH/DELETE /api/kbs/{id}`，成员 `/members` |
 | 文档 | `GET/POST /api/kbs/{id}/documents`，`DELETE`，`POST /{doc_id}/reindex` |
@@ -132,7 +132,7 @@ knowledge-qa/
 │   │   ├── services/   # parsers chunking embedding retrieval llm indexing eval tasks
 │   │   └── worker.py   # DB 任务队列消费者
 │   ├── migrations/     # Alembic
-│   └── tests/          # pytest（38）
+│   └── tests/          # pytest（43）
 ├── frontend/           # Vue3 + TS + Vite + Pinia + Element Plus
 ├── deploy/nginx.conf   # SSE 友好的反代配置
 ├── scripts/            # create_admin / seed_demo
