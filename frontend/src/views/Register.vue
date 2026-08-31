@@ -128,7 +128,8 @@ async function onSubmit() {
   background: var(--bg);
   overflow: hidden;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
 }
 /* 远山装饰：右上偏置，不抢内容 */
 .mountains {
@@ -138,12 +139,10 @@ async function onSubmit() {
   width: min(52vw, 640px);
   pointer-events: none;
 }
-/* 内容偏置左下：大留白即设计 */
+/* 内容整体居中 */
 .login-content {
   position: relative;
   width: 360px;
-  margin-left: 10vw;
-  margin-bottom: 8vh;
 }
 h1 {
   margin: 22px 0 6px;
@@ -211,8 +210,10 @@ h1 {
 }
 .copyright {
   position: absolute;
-  left: 10vw;
+  left: 0;
+  right: 0;
   bottom: 4vh;
+  text-align: center;
   font-size: 12px;
   color: var(--ink-3);
   letter-spacing: 0.08em;
